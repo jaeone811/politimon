@@ -5,8 +5,10 @@ create extension if not exists pgcrypto;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null check (char_length(display_name) between 1 and 20),
+  is_developer boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table public.profiles add column if not exists is_developer boolean not null default false;
 
 create or replace function public.create_profile_for_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$

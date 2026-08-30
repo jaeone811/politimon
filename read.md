@@ -40,6 +40,12 @@
 4. 같은 화면의 `Redirect URLs`에 `https://정확한-내-주소.pages.dev/**`를 추가합니다. 자체 도메인을 연결하면 그 주소도 추가합니다.
 5. 가입 확인 이메일을 유지하는 것이 안전합니다. 실제 서비스에서는 `Authentication` → `Email Templates`와 SMTP 설정도 검토하세요. 기본 메일 서비스는 테스트용으로만 쓰는 편이 좋습니다.
 
+### 개발 테스트 계정 두 개 만들기
+
+개발자 모드 버튼은 제거되었습니다. 멀티플레이를 안전하게 시험하려면 Supabase에 서로 다른 테스트 계정 두 개를 만들어 일반 창과 시크릿 창에서 각각 로그인하세요.
+
+가장 쉬운 Dashboard 방법과 Git Bash 자동 생성 방법은 [supabase/DEVELOPER_ACCOUNTS.md](supabase/DEVELOPER_ACCOUNTS.md)에 단계별로 정리했습니다. 자동 생성은 Secret/service_role 키를 잠깐만 사용하므로, 이 키를 `supabase-config.js`나 GitHub에 넣으면 안 됩니다.
+
 ### 웹사이트와 Supabase 연결하기
 
 1. Supabase 왼쪽 아래 `Project Settings` → `API`를 엽니다.
