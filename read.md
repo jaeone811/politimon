@@ -5,7 +5,7 @@
 ## 먼저 알아둘 점
 
 - 현재 파일만으로는 `index.html`을 열어 UI를 검토할 수 있습니다. 이때 로그인·글·방은 **현재 브라우저 안에서만** 보이는 미리보기입니다.
-- 아래 설정을 완료하면 이메일 로그인, 갤러리 글 공유, 방 생성/비밀번호/준비/시작 상태가 실제 Supabase 프로젝트에 저장됩니다.
+- 아래 설정을 완료하면 아이디·비밀번호 로그인, 갤러리 글 공유, 방 생성/비밀번호/준비/시작 상태가 실제 Supabase 프로젝트에 저장됩니다.
 - `service_role` 키는 관리자 비밀번호와 같습니다. 어떤 파일·GitHub·Cloudflare에도 넣지 않습니다. `anon` 또는 `publishable` 키만 `supabase-config.js`에 넣습니다.
 - 실제 카드 전투를 두 사람에게 동시에 적용하려면 마지막의 **전투 동기화 단계**까지 해야 합니다. 로비와 갤러리는 이 문서의 기본 단계만으로 배포됩니다.
 
@@ -32,13 +32,20 @@
 5. 왼쪽 메뉴 `SQL Editor` → `New query`를 누릅니다.
 6. 이 프로젝트의 [supabase/schema.sql](supabase/schema.sql)를 전부 복사해 붙여넣고 `Run`을 누릅니다. 성공 메시지가 나오면 게시판, 방, 준비 상태 테이블과 보안 규칙이 만들어집니다.
 
+### 방 만들기 오류를 이미 본 경우
+
+`function gen_salt(unknown) does not exist` 오류가 보였다면, Supabase 확장 함수의 위치를 SQL 함수가 찾지 못한 경우입니다. [supabase/room-password-hotfix.sql](supabase/room-password-hotfix.sql)을 전부 복사해 `SQL Editor`에서 한 번 실행하세요. 그 뒤 웹사이트를 새로고침하고 방 만들기를 다시 시도하면 됩니다.
+
+기존 대기방이 비어도 남는 문제가 있다면 [supabase/room-cleanup-hotfix.sql](supabase/room-cleanup-hotfix.sql)을 같은 방법으로 한 번 실행하세요.
+
 ### 로그인 켜기
 
 1. 왼쪽 메뉴 `Authentication` → `Providers`(또는 `Sign In / Providers`)를 엽니다.
 2. `Email`이 켜져 있는지 확인합니다. 보통 기본으로 켜져 있습니다.
 3. `URL Configuration`에서 `Site URL`에 나중에 Cloudflare가 알려 줄 주소(예: `https://politimon.pages.dev`)를 넣습니다. 배포 전에는 임시로 `http://localhost:4173`을 넣어도 됩니다.
 4. 같은 화면의 `Redirect URLs`에 `https://정확한-내-주소.pages.dev/**`를 추가합니다. 자체 도메인을 연결하면 그 주소도 추가합니다.
-5. 가입 확인 이메일을 유지하는 것이 안전합니다. 실제 서비스에서는 `Authentication` → `Email Templates`와 SMTP 설정도 검토하세요. 기본 메일 서비스는 테스트용으로만 쓰는 편이 좋습니다.
+5. `Email` 제공자 설정에서 `Confirm Email`을 **끔**으로 바꿉니다. 그래야 회원가입 직후 바로 플레이할 수 있습니다.
+6. 이용자가 입력한 아이디는 내부적으로만 로그인 주소로 변환됩니다. 이메일을 직접 수집하거나 표시하지 않습니다. 이메일 확인을 끄면 제3자가 다른 사람의 아이디를 먼저 만들 수 있으므로, 공개 서비스에서는 CAPTCHA나 별도 본인 확인 기능을 추가하는 것을 권장합니다.
 
 ### 개발 테스트 계정 두 개 만들기
 
@@ -86,7 +93,7 @@ window.POLITIMON_SUPABASE = {
 ## 4. 공개 전 확인 순서
 
 1. 시크릿 창에서 사이트를 열고 새 계정을 만듭니다.
-2. 인증 이메일을 받았다면 인증 링크를 누르고 다시 로그인합니다.
+2. 아이디와 비밀번호만 입력한 뒤, 회원가입 직후 바로 로그인되는지 확인합니다.
 3. `갤러리` → `글쓰기`에서 글을 작성합니다. 다른 브라우저에서도 같은 글이 보이는지 확인합니다.
 4. 브라우저 창 두 개에서 서로 다른 계정으로 로그인합니다.
 5. 첫 창에서 `멀티 플레이` → `방 만들기`를 누릅니다.
