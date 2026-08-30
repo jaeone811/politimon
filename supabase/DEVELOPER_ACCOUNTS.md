@@ -11,12 +11,21 @@
 5. `SQL Editor` → `New query`에서 아래 SQL의 이메일 두 개를 방금 만든 값으로 바꾼 뒤 실행합니다.
 
 ```sql
-update public.profiles
-set is_developer = true
-where id in (
-  select id from auth.users
-  where email in ('dev-one@example.com', 'dev-two@example.com')
-);
+insert into public.profiles (id, display_name, is_developer)
+select
+  id,
+  coalesce(nullif(raw_user_meta_data->>'display_name', ''), split_part(email, '@', 1)),
+  true
+from auth.users
+where email in ('dev-one@example.com', 'dev-two@example.com')
+on conflict (id) do update
+set is_developer = true;
+
+-- 실행 결과가 모두 true인지 확인합니다.
+select u.email, p.display_name, p.is_developer
+from auth.users u
+join public.profiles p on p.id = u.id
+where u.email in ('dev-one@example.com', 'dev-two@example.com');
 ```
 
 6. 게임을 브라우저 일반 창과 시크릿 창에 각각 열고, 계정 하나씩으로 로그인해 로비를 테스트합니다.

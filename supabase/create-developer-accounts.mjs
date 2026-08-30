@@ -31,10 +31,10 @@ for (const account of accounts) {
     method: "POST",
     body: JSON.stringify({ email: account.email, password: account.password, email_confirm: true, user_metadata: { display_name: account.displayName, role: "developer" } })
   });
-  await request(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ is_developer: true, display_name: account.displayName })
+  await request("/rest/v1/profiles?on_conflict=id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ id: user.id, is_developer: true, display_name: account.displayName }])
   });
   console.log(`created: ${account.email} (${user.id})`);
 }
