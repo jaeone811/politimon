@@ -50,6 +50,7 @@ create table if not exists public.room_members (
   joined_at timestamptz not null default now(),
   primary key (room_id, user_id)
 );
+alter table public.room_members add column if not exists deck jsonb;
 
 -- 전투 서버 함수가 확정한 행동만 남깁니다. 클라이언트가 피해량·승패를 쓰면 안 됩니다.
 create table if not exists public.matches (
@@ -61,6 +62,7 @@ create table if not exists public.matches (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.matches add column if not exists version integer not null default 0;
 create table if not exists public.match_actions (
   id bigint generated always as identity primary key,
   match_id uuid not null references public.matches(id) on delete cascade,
@@ -117,7 +119,7 @@ returns jsonb language sql security definer set search_path = public as $$
   select jsonb_build_object(
     'id', r.id, 'title', r.title, 'owner_id', r.owner_id, 'is_private', r.is_private,
     'max_players', r.max_players, 'status', r.status,
-    'members', coalesce(jsonb_agg(jsonb_build_object('user_id', m.user_id, 'display_name', p.display_name, 'ready', m.ready, 'is_host', m.is_host) order by m.joined_at) filter (where m.user_id is not null), '[]'::jsonb)
+    'members', coalesce(jsonb_agg(jsonb_build_object('user_id', m.user_id, 'display_name', p.display_name, 'ready', m.ready, 'is_host', m.is_host, 'deck', m.deck, 'deck_ready', jsonb_array_length(coalesce(m.deck, '[]'::jsonb)) = 10) order by m.joined_at) filter (where m.user_id is not null), '[]'::jsonb)
   ) from rooms r left join room_members m on m.room_id = r.id left join profiles p on p.id = m.user_id
   where r.id = p_room_id group by r.id;
 $$;
@@ -168,6 +170,19 @@ begin
 end;
 $$;
 
+create or replace function public.set_room_deck(p_room_id uuid, p_deck jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
+  if jsonb_typeof(p_deck) <> 'array' or jsonb_array_length(p_deck) <> 10 then
+    raise exception 'PvP 덱은 카드 10장이어야 합니다';
+  end if;
+  update room_members set deck = p_deck where room_id = p_room_id and user_id = auth.uid();
+  if not found then raise exception '이 방의 참가자가 아닙니다'; end if;
+  return room_snapshot(p_room_id);
+end;
+$$;
+
 create or replace function public.get_room(p_room_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
@@ -206,15 +221,82 @@ create or replace function public.start_room(p_room_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
   if not exists (select 1 from rooms where id=p_room_id and owner_id=auth.uid() and status='waiting') then raise exception '방장만 시작할 수 있습니다'; end if;
-  if (select count(*) from room_members where room_id=p_room_id) <> 2 or exists (select 1 from room_members where room_id=p_room_id and not ready) then raise exception '두 명 모두 준비해야 합니다'; end if;
+  if (select count(*) from room_members where room_id=p_room_id) <> 2 or exists (select 1 from room_members where room_id=p_room_id and (not ready or jsonb_array_length(coalesce(deck, '[]'::jsonb)) <> 10)) then raise exception '두 명 모두 준비하고 10장 덱을 등록해야 합니다'; end if;
   update rooms set status='playing' where id=p_room_id;
   insert into matches (room_id) values (p_room_id) on conflict (room_id) do nothing;
   return room_snapshot(p_room_id);
 end;
 $$;
 
-grant execute on function public.list_public_rooms(), public.create_room(text, boolean, text), public.join_room(uuid, text), public.set_room_ready(uuid, boolean), public.get_room(uuid), public.leave_room(uuid), public.start_room(uuid) to authenticated, anon;
+-- PvP 상태는 참여자만 읽을 수 있으며, 모든 변경은 아래 RPC로만 수행합니다.
+drop policy if exists "match members can read matches" on public.matches;
+create policy "match members can read matches" on public.matches for select using (
+  exists (select 1 from room_members rm where rm.room_id = matches.room_id and rm.user_id = auth.uid())
+);
+drop policy if exists "match members can read actions" on public.match_actions;
+create policy "match members can read actions" on public.match_actions for select using (
+  exists (select 1 from matches ma join room_members rm on rm.room_id = ma.room_id where ma.id = match_actions.match_id and rm.user_id = auth.uid())
+);
+
+create or replace function public.match_snapshot(p_room_id uuid)
+returns jsonb language sql security definer set search_path = public as $$
+  select jsonb_build_object(
+    'id', ma.id, 'room_id', ma.room_id, 'state', ma.state, 'turn_user_id', ma.turn_user_id,
+    'status', ma.status, 'version', ma.version,
+    'members', coalesce(jsonb_agg(jsonb_build_object('user_id', rm.user_id, 'display_name', pr.display_name, 'is_host', rm.is_host) order by rm.joined_at), '[]'::jsonb)
+  )
+  from matches ma join room_members rm on rm.room_id = ma.room_id join profiles pr on pr.id = rm.user_id
+  where ma.room_id = p_room_id group by ma.id;
+$$;
+
+create or replace function public.get_match(p_room_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or not exists (select 1 from room_members where room_id = p_room_id and user_id = auth.uid()) then
+    raise exception '이 대전의 참가자만 전황을 확인할 수 있습니다';
+  end if;
+  return match_snapshot(p_room_id);
+end;
+$$;
+
+create or replace function public.start_match(p_room_id uuid, p_state jsonb, p_turn_user_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare target matches%rowtype;
+begin
+  if not exists (select 1 from rooms where id=p_room_id and owner_id=auth.uid() and status='playing') then raise exception '방장만 PvP를 초기화할 수 있습니다'; end if;
+  if jsonb_typeof(p_state) <> 'object' or coalesce(jsonb_array_length(p_state->'players'), 0) <> 2 then raise exception '올바르지 않은 초기 전투 상태입니다'; end if;
+  if not exists (select 1 from room_members where room_id=p_room_id and user_id=p_turn_user_id) then raise exception '올바르지 않은 선공 플레이어입니다'; end if;
+  select * into target from matches where room_id=p_room_id for update;
+  if not found then insert into matches(room_id,state,turn_user_id) values(p_room_id,p_state,p_turn_user_id); else
+    if target.state <> '{}'::jsonb then raise exception '이미 시작된 대전입니다'; end if;
+    update matches set state=p_state, turn_user_id=p_turn_user_id, status='playing', version=1, updated_at=now() where id=target.id;
+  end if;
+  return match_snapshot(p_room_id);
+end;
+$$;
+
+create or replace function public.submit_match_state(p_match_id uuid, p_expected_version integer, p_state jsonb, p_next_turn_user_id uuid, p_action jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare target matches%rowtype; actor uuid := auth.uid(); next_version integer;
+begin
+  if actor is null then raise exception '로그인이 필요합니다'; end if;
+  select * into target from matches where id=p_match_id for update;
+  if not found then raise exception '대전을 찾을 수 없습니다'; end if;
+  if not exists (select 1 from room_members where room_id=target.room_id and user_id=actor) then raise exception '대전 참가자만 행동할 수 있습니다'; end if;
+  if target.status <> 'playing' or target.turn_user_id <> actor then raise exception '상대 턴이거나 종료된 대전입니다'; end if;
+  if target.version <> p_expected_version then raise exception '전황이 갱신되었습니다. 다시 시도해 주세요'; end if;
+  if jsonb_typeof(p_state) <> 'object' or coalesce(jsonb_array_length(p_state->'players'), 0) <> 2 then raise exception '올바르지 않은 전투 상태입니다'; end if;
+  if p_next_turn_user_id is not null and not exists (select 1 from room_members where room_id=target.room_id and user_id=p_next_turn_user_id) then raise exception '올바르지 않은 다음 턴 플레이어입니다'; end if;
+  next_version := target.version + 1;
+  update matches set state=p_state, turn_user_id=p_next_turn_user_id, status=case when (p_state->>'phase')='finished' then 'finished' else 'playing' end, version=next_version, updated_at=now() where id=target.id;
+  insert into match_actions(match_id,actor_id,sequence_no,action) values(p_match_id,actor,next_version,coalesce(p_action, '{}'::jsonb));
+  return match_snapshot(target.room_id);
+end;
+$$;
+
+grant execute on function public.list_public_rooms(), public.create_room(text, boolean, text), public.join_room(uuid, text), public.set_room_ready(uuid, boolean), public.set_room_deck(uuid, jsonb), public.get_room(uuid), public.leave_room(uuid), public.start_room(uuid), public.get_match(uuid), public.start_match(uuid, jsonb, uuid), public.submit_match_state(uuid, integer, jsonb, uuid, jsonb) to authenticated;
 revoke all on function public.room_snapshot(uuid) from public, anon, authenticated;
+revoke all on function public.match_snapshot(uuid) from public, anon, authenticated;
 
 -- Realtime > Replication에서도 rooms, room_members, matches, match_actions를 켜 주세요.
 -- UI에서 새로고침 없이 반영하려면 backend.js에 해당 채널 구독을 추가합니다.
