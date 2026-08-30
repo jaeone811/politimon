@@ -38,6 +38,8 @@
 
 기존 대기방이 비어도 남는 문제가 있다면 [supabase/room-cleanup-hotfix.sql](supabase/room-cleanup-hotfix.sql)을 같은 방법으로 한 번 실행하세요.
 
+개발자 계정으로 갤러리 글을 삭제하려면 [supabase/gallery-moderation-hotfix.sql](supabase/gallery-moderation-hotfix.sql)을 같은 방법으로 한 번 실행하세요.
+
 ### 로그인 켜기
 
 1. 왼쪽 메뉴 `Authentication` → `Providers`(또는 `Sign In / Providers`)를 엽니다.
@@ -89,6 +91,18 @@ window.POLITIMON_SUPABASE = {
 7. 위 Supabase의 `Site URL`과 `Redirect URLs`에 이 정확한 주소를 넣고 `Save`합니다.
 
 이후 GitHub에 커밋을 올릴 때마다 Cloudflare Pages가 자동으로 새 버전을 배포합니다.
+
+### 회원 탈퇴 기능 배포
+
+회원 탈퇴는 브라우저가 아닌 Supabase 서버에서만 처리합니다. 그래야 관리자 키가 웹사이트에 노출되지 않습니다.
+
+1. Supabase Dashboard → `Edge Functions` → `Deploy a new function`을 누릅니다.
+2. 함수 이름을 정확히 `delete-account`로 입력합니다.
+3. [supabase/functions/delete-account/index.ts](supabase/functions/delete-account/index.ts) 전체를 붙여넣고 배포합니다.
+4. 함수의 JWT 검증은 기본값인 **켜짐**으로 유지합니다.
+5. 배포 후 게임에서 테스트 계정으로 로그인 → 우측 상단 프로필 → `회원 탈퇴`를 눌러 확인합니다.
+
+이 작업은 `auth.users` 계정을 실제로 삭제합니다. 프로필을 기준으로 연결된 갤러리 글·대기방 정보도 함께 정리됩니다. 삭제는 되돌릴 수 없습니다. Supabase의 서비스 역할 키는 Edge Function 안에서만 사용되며, `supabase-config.js`나 GitHub에 넣으면 안 됩니다.
 
 ## 4. 공개 전 확인 순서
 
