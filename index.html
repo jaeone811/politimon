@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101827" />
+  <title>정켓몬스터 카드 게임 | Politimon Card Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Gowun+Dodum&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="effects.css" />
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <header class="topbar">
+    <a class="brand" href="#home" data-route="home"><span class="brand-mark"><img src="assets/politimon-logo-user.png" alt="Politimon Card Arena 로고"></span><span><b>정켓몬스터 카드 게임</b><small>POLITIMON CARD ARENA</small></span></a>
+    <div class="profile">
+      <button class="top-profile" id="open-profile" type="button" aria-label="프로필 및 로그인"><span class="profile-avatar" id="profile-avatar">P</span><span><small id="profile-status">GUEST</small><b id="profile-name">게스트</b></span></button>
+      <span class="currency">◈ <b id="currency-count">0</b></span>
+      <button class="top-icon" id="open-notifications" type="button" aria-label="알림"><i id="notification-dot" hidden></i></button>
+      <button class="top-icon" id="open-settings" type="button" aria-label="설정">⚙</button>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <nav class="bottom-nav" aria-label="주 메뉴">
+    <button data-route="home">⌂<span>홈</span></button>
+    <button data-route="ai">♙<span>AI 대전</span></button>
+    <button data-route="packs">✦<span>팩 센터</span></button>
+    <button data-route="collection">▦<span>도감</span></button>
+    <button data-route="deck">▤<span>덱</span></button>
+  </nav>
+  <div id="toast" class="toast" role="status"></div>
+  <div id="modal-root"></div>
+  <!-- 파일을 직접 열어도 동작하도록, 모듈 import 대신 순차 로드합니다. -->
+  <script defer src="data.js"></script>
+  <script defer src="storage.js"></script>
+  <script defer src="engine.js"></script>
+  <script defer src="supabase-config.js"></script>
+  <script defer src="backend.js"></script>
+  <script defer src="home-news.js"></script>
+  <script defer src="app.js"></script>
+</body>
+</html>
