@@ -38,7 +38,9 @@
 
 기존 대기방이 비어도 남는 문제가 있다면 [supabase/room-cleanup-hotfix.sql](supabase/room-cleanup-hotfix.sql)을 같은 방법으로 한 번 실행하세요.
 
-개발자 계정으로 갤러리 글을 삭제하려면 [supabase/gallery-moderation-hotfix.sql](supabase/gallery-moderation-hotfix.sql)을 같은 방법으로 한 번 실행하세요.
+방장이 로비의 최신 참가자·준비 상태를 새로고침하려면 [supabase/room-refresh-hotfix.sql](supabase/room-refresh-hotfix.sql)을 같은 방법으로 한 번 실행하세요.
+
+글쓴이 본인 또는 개발자 계정으로 갤러리 글을 삭제하려면 [supabase/gallery-moderation-hotfix.sql](supabase/gallery-moderation-hotfix.sql)을 같은 방법으로 한 번 실행하세요. 이 파일을 실행하지 않으면 `delete_gallery_post` 함수를 찾을 수 없다는 오류가 납니다.
 
 ### 로그인 켜기
 

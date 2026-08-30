@@ -89,6 +89,23 @@ create policy "authors update own posts" on public.gallery_posts for update usin
 drop policy if exists "authors delete own posts" on public.gallery_posts;
 create policy "authors delete own posts" on public.gallery_posts for delete using (auth.uid() = author_id);
 
+create or replace function public.delete_gallery_post(p_post_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
+  if not exists (
+    select 1 from gallery_posts post
+    where post.id = p_post_id
+      and (post.author_id = auth.uid() or exists (select 1 from profiles where id = auth.uid() and is_developer))
+  ) then
+    raise exception '글쓴이 본인 또는 개발자 계정만 글을 삭제할 수 있습니다';
+  end if;
+  delete from gallery_posts where id = p_post_id;
+  if not found then raise exception '삭제할 글을 찾을 수 없습니다'; end if;
+end;
+$$;
+grant execute on function public.delete_gallery_post(uuid) to authenticated;
+
 -- 방 관련 테이블은 RPC로만 쓰며, 아래 직접 정책은 조회용으로도 열지 않습니다.
 drop policy if exists "no direct room access" on public.rooms;
 create policy "no direct room access" on public.rooms for select using (false);
@@ -121,7 +138,7 @@ begin
   if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
   if p_is_private and (p_password !~ '^[0-9]{4}$') then raise exception '비밀번호는 숫자 4자리여야 합니다'; end if;
   insert into rooms (title, owner_id, is_private, password_hash)
-  values (trim(p_title), auth.uid(), p_is_private, case when p_is_private then crypt(p_password, gen_salt('bf')) else null end)
+  values (trim(p_title), auth.uid(), p_is_private, case when p_is_private then extensions.crypt(p_password, extensions.gen_salt('bf')) else null end)
   returning id into new_room;
   insert into room_members (room_id, user_id, is_host, ready) values (new_room, auth.uid(), true, true);
   return room_snapshot(new_room);
@@ -135,7 +152,7 @@ begin
   if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
   select * into target from rooms where id = p_room_id for update;
   if not found or target.status <> 'waiting' then raise exception '입장 가능한 방이 아닙니다'; end if;
-  if target.is_private and target.password_hash <> crypt(coalesce(p_password, ''), target.password_hash) then raise exception '비밀번호가 맞지 않습니다'; end if;
+  if target.is_private and target.password_hash <> extensions.crypt(coalesce(p_password, ''), target.password_hash) then raise exception '비밀번호가 맞지 않습니다'; end if;
   if (select count(*) from room_members where room_id = p_room_id) >= target.max_players and not exists (select 1 from room_members where room_id=p_room_id and user_id=auth.uid()) then raise exception '방이 가득 찼습니다'; end if;
   insert into room_members (room_id, user_id) values (p_room_id, auth.uid()) on conflict (room_id, user_id) do nothing;
   return room_snapshot(p_room_id);
@@ -151,6 +168,40 @@ begin
 end;
 $$;
 
+create or replace function public.get_room(p_room_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
+  if not exists (select 1 from room_members where room_id = p_room_id and user_id = auth.uid()) then
+    raise exception '이 방의 참가자만 방 정보를 확인할 수 있습니다';
+  end if;
+  return room_snapshot(p_room_id);
+end;
+$$;
+
+create or replace function public.leave_room(p_room_id uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare target rooms%rowtype; next_host uuid;
+begin
+  if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
+  select * into target from rooms where id = p_room_id for update;
+  if not found then return jsonb_build_object('deleted', true); end if;
+  if target.status <> 'waiting' then raise exception '게임이 시작된 방에서는 나갈 수 없습니다'; end if;
+  if not exists (select 1 from room_members where room_id = p_room_id and user_id = auth.uid()) then raise exception '이 방의 참가자가 아닙니다'; end if;
+  delete from room_members where room_id = p_room_id and user_id = auth.uid();
+  if not exists (select 1 from room_members where room_id = p_room_id) then
+    delete from rooms where id = p_room_id;
+    return jsonb_build_object('deleted', true);
+  end if;
+  if target.owner_id = auth.uid() then
+    select user_id into next_host from room_members where room_id = p_room_id order by joined_at limit 1;
+    update rooms set owner_id = next_host where id = p_room_id;
+    update room_members set is_host = (user_id = next_host), ready = case when user_id = next_host then true else ready end where room_id = p_room_id;
+  end if;
+  return jsonb_build_object('deleted', false);
+end;
+$$;
+
 create or replace function public.start_room(p_room_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
@@ -162,7 +213,7 @@ begin
 end;
 $$;
 
-grant execute on function public.list_public_rooms(), public.create_room(text, boolean, text), public.join_room(uuid, text), public.set_room_ready(uuid, boolean), public.start_room(uuid) to authenticated, anon;
+grant execute on function public.list_public_rooms(), public.create_room(text, boolean, text), public.join_room(uuid, text), public.set_room_ready(uuid, boolean), public.get_room(uuid), public.leave_room(uuid), public.start_room(uuid) to authenticated, anon;
 revoke all on function public.room_snapshot(uuid) from public, anon, authenticated;
 
 -- Realtime > Replication에서도 rooms, room_members, matches, match_actions를 켜 주세요.
