@@ -4,8 +4,9 @@
  * 권장 이미지 비율: 4 : 5 (예: 1200 × 1500px)
  */
 window.POLITIMON_HOME_NEWS = {
-  image: "assets/news/news-01.jpg",
-  label: "POLITIMON NEWS",
-  title: "정켓몬스터 카드 게임 1.0 출시!",
-  description: "카드 수집과 AI 대전, 멀티 플레이를 지금 시작해 보세요."
+  image: "assets/news/season-1-start.png",
+  logo: "assets/politimon-logo-user.png",
+  label: "POLITIMON · SEASON 1",
+  title: "시즌 1 시작",
+  description: "8.31 — 10.31 · 베타 시즌 데이터 초기화"
 };

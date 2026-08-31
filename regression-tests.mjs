@@ -5,16 +5,66 @@ import vm from "node:vm";
 const dataSource=fs.readFileSync(new URL("./data.js",import.meta.url),"utf8");
 const engineSource=fs.readFileSync(new URL("./engine.js",import.meta.url),"utf8");
 const appSource=fs.readFileSync(new URL("./app.js",import.meta.url),"utf8");
+const backendSource=fs.readFileSync(new URL("./backend.js",import.meta.url),"utf8");
+const storageSource=fs.readFileSync(new URL("./storage.js",import.meta.url),"utf8");
 const forfeitSql=fs.readFileSync(new URL("./supabase/pvp-forfeit-hotfix.sql",import.meta.url),"utf8");
+const gameProfileSql=fs.readFileSync(new URL("./supabase/game-profile-sync.sql",import.meta.url),"utf8");
 const context=vm.createContext({console,Math,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},window:{dispatchEvent(){}}});
 vm.runInContext(`${dataSource}\n${engineSource}\nglobalThis.testExports={cards,cardById,settings,GameEngine};`,context);
 const {cards,settings,GameEngine}=context.testExports;
+assert.deepEqual({...settings.rarityOdds},{HR:0.5,SSR:3.5,SR:6,RR:10,R:20,U:25,C:35},"시즌 1 공식 카드팩 확률");
 const parkGeunHye=cards.find(card=>card.id==="character_04"),thaad=parkGeunHye?.skills?.[0];
 assert.equal(thaad?.effects?.find(effect=>effect.type==="damage")?.amount,40,"박근혜 사드 배치 기본 피해");
 assert.equal(thaad?.effects?.find(effect=>effect.type==="bonusDamageIfSelfHpAtLeast")?.amount,10,"박근혜 사드 배치 조건 추가 피해");
 assert.match(thaad?.description||"",/추가 피해 10.*기본 40 피해/,"박근혜 카드 설명 수치");
 assert.equal(parkGeunHye?.trait?.effects?.find(effect=>effect.type==="bonusDamageUnlessEnemyAttribute")?.amount,10,"박근혜 특성 조건 추가 피해");
 assert.match(parkGeunHye?.trait?.description||"",/추가 피해 10/,"박근혜 특성 설명 수치");
+assert.equal(cards.find(card=>card.id==="character_16")?.hp,140,"조 바이든 기본 체력 140");
+assert.match(appSource,/ai\.active=tutorialActive\("character_16"\);/,"튜토리얼 조 바이든은 기본 체력으로 시작");
+assert.doesNotMatch(appSource,/tutorialActive\("character_16",300\)/,"튜토리얼 조 바이든 임시 체력 제거");
+
+{
+  const values=new Map(),localStorage={getItem:key=>values.has(key)?values.get(key):null,setItem:(key,value)=>values.set(key,value)};
+  const storageContext=vm.createContext({localStorage});
+  vm.runInContext(`${storageSource};globalThis.exports={defaultProfile,loadProfile,saveProfile,profileStorageKey};`,storageContext);
+  const first=storageContext.exports.defaultProfile(),second=storageContext.exports.defaultProfile();
+  first.currency=777;second.currency=333;
+  storageContext.exports.saveProfile(first,"user-a");storageContext.exports.saveProfile(second,"user-b");
+  assert.equal(storageContext.exports.loadProfile("user-a").currency,777,"계정 A 로컬 캐시 분리");
+  assert.equal(storageContext.exports.loadProfile("user-b").currency,333,"계정 B 로컬 캐시 분리");
+  assert.notEqual(storageContext.exports.profileStorageKey("user-a"),storageContext.exports.profileStorageKey("user-b"),"계정별 저장 키 분리");
+}
+
+{
+  assert.match(backendSource,/async getGameProfile\(userId\)[\s\S]*rpc\("get_game_profile"\)/,"서버 게임 프로필 불러오기 API");
+  assert.match(backendSource,/async saveGameProfile\(userId, profile, expectedRevision, seasonId\)[\s\S]*rpc\("save_game_profile"/,"서버 게임 프로필 저장 API");
+  assert.match(appSource,/function syncAccountGameProfile[\s\S]{0,1800}getGameProfile[\s\S]{0,1800}saveGameProfile/,"로그인 시 서버 프로필 로드 또는 최초 이전");
+  assert.match(appSource,/const save = \(\) => \{ saveProfile\(profile,authSession\?\.user\?\.id\|\|null\);queueServerProfileSave\(\)/,"모든 진행 저장 시 계정별 서버 동기화 예약");
+  assert.match(appSource,/game_profile_revision_conflict/,"다른 기기 동시 저장 충돌 감지");
+  assert.match(appSource,/if\(session\?\.user\)await syncAccountGameProfile\(\)/,"자동 로그인 시 서버 진행 불러오기");
+  assert.match(gameProfileSql,/create table if not exists public\.game_profiles/,"게임 진행 서버 테이블");
+  ["collection","deck","currency","achievements","claimed_pvp_matches","records","season_id","revision"].forEach(column=>assert.match(gameProfileSql,new RegExp(`\\b${column}\\b`),`서버 진행 필드 ${column}`));
+  assert.match(gameProfileSql,/where user_id = auth\.uid\(\)/,"본인 계정 진행만 조회");
+  assert.match(gameProfileSql,/p_expected_revision <> current_revision[\s\S]{0,100}game_profile_revision_conflict/,"서버 낙관적 잠금");
+  assert.match(gameProfileSql,/on delete cascade/,"회원 탈퇴 시 서버 진행 데이터 자동 삭제");
+}
+
+{
+  const syncSource=appSource.match(/function gameProfileSnapshot[\s\S]*?function updateHeaderUser/)?.[0].replace(/function updateHeaderUser[\s\S]*/,"");
+  assert.ok(syncSource,"계정 진행 동기화 함수 추출");
+  const values=new Map(),savedPayloads=[],remoteProfile={profile:{collection:{character_04:1},deck:["character_04"],currency:900,achievements:{tutorial:true},claimedPvpMatches:{match:true},records:{wins:4,plays:5}},seasonId:"season-1",revision:7};
+  const localStorage={getItem:key=>values.has(key)?values.get(key):null,setItem:(key,value)=>values.set(key,value)};
+  const backend={getGameProfile:async()=>remoteProfile,saveGameProfile:async(userId,payload,revision,seasonId)=>{savedPayloads.push({userId,payload,revision,seasonId});return {profile:payload,seasonId,revision:Number(revision||0)+1};}};
+  const syncContext=vm.createContext({console,Math,localStorage,window:{politimonBackend:backend},document:{querySelector:()=>null,createTextNode:value=>value},setTimeout,clearTimeout,notify(){},render(){}});
+  vm.runInContext(`${dataSource}\n${storageSource}\nconst clone=value=>JSON.parse(JSON.stringify(value));let profile=defaultProfile(),authSession={user:{id:"account-a"}},serverProfileSync={userId:null,revision:null,seasonId:null,ready:false,saving:false,pending:null,activePromise:Promise.resolve(),retryTimer:null,errorNotified:false};const CURRENT_SEASON_ID="season-1",currentUser=()=>authSession.user;${syncSource};globalThis.syncExports={syncAccountGameProfile,queueServerProfileSave,flushServerProfileSave,getProfile:()=>profile,setCurrency:value=>profile.currency=value,getRevision:()=>serverProfileSync.revision};`,syncContext);
+  await syncContext.syncExports.syncAccountGameProfile();
+  assert.equal(syncContext.syncExports.getProfile().currency,900,"로그인 시 서버 재화 불러오기");
+  assert.equal(syncContext.syncExports.getProfile().records.wins,4,"로그인 시 서버 전적 불러오기");
+  syncContext.syncExports.setCurrency(875);syncContext.syncExports.queueServerProfileSave();
+  assert.equal(await syncContext.syncExports.flushServerProfileSave(),true,"진행 상황 서버 저장 완료");
+  assert.equal(savedPayloads.at(-1).payload.currency,875,"변경된 재화 서버 저장");
+  assert.equal(savedPayloads.at(-1).revision,7,"서버 버전에 대한 충돌 방지 저장");
+}
 
 const effectsOf=card=>[
   ...(card.effects||[]),
@@ -183,7 +233,10 @@ const damageTaken=engine=>500-engine.state.players[1].active.currentHp;
   assert.match(appSource,/previousState\?\.turn===1&&game\.state\.turn===0[\s\S]{0,100}showTurnTransition\(0\)/,"상대 턴 종료 수신 시 나의 턴 표시");
   assert.match(appSource,/shouldLeaveFinishedRoom[\s\S]{0,180}leaveActiveRoom\(\)/,"종료된 PvP에서 화면 이탈 시 방 탈퇴");
   assert.match(appSource,/if\(next===\"gallery\"\)galleryLoaded=false/,"갤러리 메뉴 진입 시 최신 글 다시 불러오기");
-  assert.match(appSource,/PATCH NOTES · v1\.0\.1/,"1.0.1 패치노트 표시");
+  assert.match(appSource,/PATCH NOTES · v1\.1/,"1.1 패치노트 표시");
+  assert.doesNotMatch(appSource,/PATCH NOTES · v1\.0\.1/,"1.0.1 단독 표기 제거");
+  assert.match(appSource,/시즌 1 시작 · 8\.31 — 10\.31/,"시즌 1 기간 패치노트");
+  assert.match(appSource,/SEASON_ONE_RESET_KEY[\s\S]{0,500}profile=resetProfile\(\)/,"시즌 1 최초 접속 데이터 초기화");
   assert.match(appSource,/특성 ‘박정희의 딸’의 비빨강 대상 추가 피해도 20에서 10으로 낮췄습니다\./,"박근혜 특성 너프 패치노트");
   assert.match(appSource,/id="forfeit-pvp"/,"진행 중 PvP 방 나가기 버튼");
   assert.match(appSource,/최대 \$\{penalty\}P가 차감됩니다[\s\S]*상대방은 승리로 처리/,"탈주 경고 문구");
@@ -197,6 +250,26 @@ const damageTaken=engine=>500-engine.state.players[1].active.currentHp;
   declaredCoinTypes.forEach(type=>assert.ok(uiCoinTypes.has(type),`UI에서 누락된 동전 효과: ${type}`));
   assert.match(appSource,/function enqueueVisualEffect\(run,fallbackValue=undefined\)[\s\S]{0,500}run\(value=>resolve\(value===undefined\?fallbackValue:value\)\)/,"시각 효과 완료값을 호출자에게 보존");
   assert.match(appSource,/function showCoinFlip[\s\S]{0,1800}\},result\);/,"동전 연출 생략 시에도 실제 결과 보존");
+}
+
+{
+  const raritySource=appSource.match(/function rarityTransferTarget[\s\S]*?function metricValue/)?.[0].replace(/function metricValue[\s\S]*/,"");
+  assert.ok(raritySource,"시즌 1 희귀도 이월 함수 존재");
+  const rarityContext=vm.createContext({
+    RARITIES:["HR","SSR","SR","RR","R","U","C"],
+    settings:{rarityOdds:{HR:0.5,SSR:3.5,SR:6,RR:10,R:20,U:25,C:35}},
+    packCards:pack=>pack.cards,
+    Math,
+  });
+  vm.runInContext(`${raritySource};globalThis.exports={rarityTransferTarget,packRarityOdds,drawFromPack};`,rarityContext);
+  const pack={cards:[{id:"ssr",rarity:"SSR"},{id:"common",rarity:"C"}]};
+  const odds=rarityContext.exports.packRarityOdds(pack);
+  assert.equal(odds.SSR,65,"팩에 없는 HR~U 확률은 상위 SSR로 이월");
+  assert.equal(odds.C,35,"존재하는 C 확률 유지");
+  assert.equal(Object.values(odds).reduce((sum,value)=>sum+value,0),100,"이월 후 총 확률 100%");
+  assert.equal(rarityContext.exports.rarityTransferTarget("HR",new Set(["SSR"])),"SSR","HR은 SSR로 이월");
+  const draws=rarityContext.exports.drawFromPack(pack);
+  assert.ok(draws.every(card=>card.id==="ssr"||card.id==="common"),"팩 외 희귀도 재추첨 없이 실제 카드 풀에서만 지급");
 }
 
 {

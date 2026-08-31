@@ -14,7 +14,7 @@ const settings = {
   ssrLimit: 2,
   packPrice: 100,                      // 팩별 가격이 없을 때 사용하는 기본값
   cardsPerPack: 5,
-  rarityOdds: { HR: 0.8, SSR: 4.2, SR: 10, RR: 15, R: 20, U: 22, C: 28 },
+  rarityOdds: { HR: 0.5, SSR: 3.5, SR: 6, RR: 10, R: 20, U: 25, C: 35 },
   handRefillCount: 1,
   handRefillMethod: null,
   types: [
