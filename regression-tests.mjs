@@ -10,8 +10,8 @@ const storageSource=fs.readFileSync(new URL("./storage.js",import.meta.url),"utf
 const forfeitSql=fs.readFileSync(new URL("./supabase/pvp-forfeit-hotfix.sql",import.meta.url),"utf8");
 const gameProfileSql=fs.readFileSync(new URL("./supabase/game-profile-sync.sql",import.meta.url),"utf8");
 const context=vm.createContext({console,Math,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},window:{dispatchEvent(){}}});
-vm.runInContext(`${dataSource}\n${engineSource}\nglobalThis.testExports={cards,cardById,settings,GameEngine};`,context);
-const {cards,settings,GameEngine}=context.testExports;
+vm.runInContext(`${dataSource}\n${engineSource}\nglobalThis.testExports={cards,cardById,settings,achievements,GameEngine};`,context);
+const {cards,settings,achievements,GameEngine}=context.testExports;
 assert.deepEqual({...settings.rarityOdds},{HR:0.5,SSR:3.5,SR:6,RR:10,R:20,U:25,C:35},"시즌 1 공식 카드팩 확률");
 const parkGeunHye=cards.find(card=>card.id==="character_04"),thaad=parkGeunHye?.skills?.[0];
 assert.equal(thaad?.effects?.find(effect=>effect.type==="damage")?.amount,40,"박근혜 사드 배치 기본 피해");
@@ -22,6 +22,33 @@ assert.match(parkGeunHye?.trait?.description||"",/추가 피해 10/,"박근혜 �
 assert.equal(cards.find(card=>card.id==="character_16")?.hp,140,"조 바이든 기본 체력 140");
 assert.match(appSource,/ai\.active=tutorialActive\("character_16"\);/,"튜토리얼 조 바이든은 기본 체력으로 시작");
 assert.doesNotMatch(appSource,/tutorialActive\("character_16",300\)/,"튜토리얼 조 바이든 임시 체력 제거");
+assert.deepEqual({...settings.reward},{aiWinEasy:90,aiWinNormal:110,aiWinHard:130,aiLoss:30,pvpWin:150,pvpLoss:50,pvpForfeitPenalty:30},"상향된 난이도별 플레이 보상");
+assert.ok(achievements.every(achievement=>achievement.reward%5===0),"모든 도전과제 보상은 5P 단위");
+assert.equal(achievements.reduce((sum,achievement)=>sum+achievement.reward,0),5715,"상향된 도전과제 총 보상");
+assert.match(appSource,/rewardEligible:\(profile\.records\?\.tutorial\|\|0\)<1/,"튜토리얼 최초 완료 보상 자격 기록");
+
+{
+  const aiSource=appSource.match(/const RARITY_POWER[\s\S]*?function rarityTransferTarget/)?.[0].replace(/function rarityTransferTarget[\s\S]*/,"");
+  assert.ok(aiSource,"AI 덱 생성 함수 추출");
+  const fixedMath=Object.create(Math);fixedMath.random=()=>0.5;
+  const aiContext=vm.createContext({console,Math:fixedMath});
+  const helpers=`
+    const deckCounts=deck=>{const usable=deck.filter(id=>cardById[id]);return {characters:usable.filter(id=>cardById[id].type==="character").length,strategies:usable.filter(id=>cardById[id].type==="strategy").length,vmax:usable.filter(id=>isVmaxCard(cardById[id])).length,ssr:usable.filter(id=>cardById[id].rarity==="SSR").length}};
+    const canDeckAcceptCard=(deck,card)=>{if(!card||deck.includes(card.id)||deck.length>=settings.deckCardCount)return false;const counts=deckCounts(deck);if(card.type==="character"&&counts.characters>=settings.characterLimit)return false;if(card.type==="strategy"&&counts.strategies>=settings.strategyLimit)return false;if(isVmaxCard(card)&&counts.vmax>=settings.vmaxLimit)return false;if(card.rarity==="SSR"&&counts.ssr>=settings.ssrLimit)return false;return true};
+    const validDeck=deck=>{const counts=deckCounts(deck);return counts.characters===settings.characterLimit&&counts.strategies===settings.strategyLimit&&counts.vmax<=settings.vmaxLimit&&counts.ssr<=settings.ssrLimit&&deck.length===settings.deckCardCount};
+    let selectedAiOpponentId="ai_people_power_easy";
+  `;
+  vm.runInContext(`${dataSource}\n${helpers}\n${aiSource};globalThis.aiExports={AI_OPPONENTS,buildAiDeck,aiDeckCardScore,cardById};`,aiContext);
+  for(const opponent of aiContext.aiExports.AI_OPPONENTS){
+    const deck=aiContext.aiExports.buildAiDeck(opponent),rarities=deck.map(id=>aiContext.aiExports.cardById[id].rarity);
+    assert.equal(deck.length,10,`${opponent.name} AI 덱 10장 구성`);
+    if(opponent.level==="easy")assert.ok(rarities.every(rarity=>rarity!=="SSR"&&rarity!=="HR"),`${opponent.name} 입문 덱 SSR/HR 제외`);
+    if(opponent.level==="normal")assert.ok(rarities.every(rarity=>rarity!=="HR"),`${opponent.name} 중급 덱 HR 제외`);
+  }
+  const easy={level:"easy",attributes:[],packs:[],strategyIds:[],allowVmax:false},normal={...easy,level:"normal"};
+  assert.ok(aiContext.aiExports.aiDeckCardScore({rarity:"RR",type:"character"},easy)<aiContext.aiExports.aiDeckCardScore({rarity:"R",type:"character"},easy),"입문 AI의 RR 선호도 하향");
+  assert.ok(aiContext.aiExports.aiDeckCardScore({rarity:"SR",type:"character"},normal)<aiContext.aiExports.aiDeckCardScore({rarity:"RR",type:"character"},normal),"중급 AI의 SR 선호도 하향");
+}
 
 {
   const values=new Map(),localStorage={getItem:key=>values.has(key)?values.get(key):null,setItem:(key,value)=>values.set(key,value)};
@@ -287,20 +314,43 @@ const damageTaken=engine=>500-engine.state.players[1].active.currentHp;
 }
 
 {
-  const rewardFunction=appSource.match(/function grantMatchReward[\s\S]*?function matchRewardText/)?.[0].replace(/function matchRewardText[\s\S]*/,"");
+  const rewardFunction=appSource.match(/function aiWinRewardKey[\s\S]*?function matchRewardText/)?.[0].replace(/function matchRewardText[\s\S]*/,"");
   assert.ok(rewardFunction,"대전 보상 함수 존재");
   const rewardContext=vm.createContext({
-    settings:{reward:{pvpWin:90,pvpLoss:25,pvpForfeitPenalty:30}},
-    game:{rewardClaimed:false,snapshot:()=>({pvpForfeit:{loserUserId:"me",winnerUserId:"other",penalty:30}})},
+    settings:{reward:{aiWinEasy:90,aiWinNormal:110,aiWinHard:130,aiLoss:30,pvpWin:150,pvpLoss:50,pvpForfeitPenalty:30}},
+    game:{rewardClaimed:false,aiOpponent:{level:"hard"},snapshot:()=>({pvpForfeit:{loserUserId:"me",winnerUserId:"other",penalty:30}})},
     currentUser:()=>({id:"me"}),pvpSession:{matchId:"match-1"},
     profile:{currency:12,claimedPvpMatches:{},records:{}},
     save(){},checkAchievements(){},notify(){}
   });
-  vm.runInContext(`${rewardFunction};grantMatchReward(1,{pvp:true});`,rewardContext);
+  vm.runInContext(rewardFunction,rewardContext);
+  assert.equal(vm.runInContext(`matchRewardAmount(true,false)`,rewardContext),130,"상급 AI 승리 130P");
+  rewardContext.game.aiOpponent.level="normal";
+  assert.equal(vm.runInContext(`matchRewardAmount(true,false)`,rewardContext),110,"중급 AI 승리 110P");
+  rewardContext.game.aiOpponent.level="easy";
+  assert.equal(vm.runInContext(`matchRewardAmount(true,false)`,rewardContext),90,"입문 AI 승리 90P");
+  assert.equal(vm.runInContext(`matchRewardAmount(false,false)`,rewardContext),30,"AI 패배 30P");
+  assert.equal(vm.runInContext(`matchRewardAmount(true,true)`,rewardContext),150,"PvP 승리 150P");
+  assert.equal(vm.runInContext(`matchRewardAmount(false,true)`,rewardContext),50,"PvP 패배 50P");
+  vm.runInContext(`grantMatchReward(1,{pvp:true});`,rewardContext);
   assert.equal(rewardContext.profile.currency,0,"탈주 페널티 적용 후 재화는 음수가 되지 않음");
   assert.equal(rewardContext.profile.records.losses,1,"탈주자는 패배 기록");
   assert.equal(rewardContext.profile.records.pvpPlays,1,"탈주 대전도 PvP 완료 기록");
   assert.equal(rewardContext.profile.claimedPvpMatches["me:match-1"],true,"탈주 결과 중복 정산 방지 표식");
+
+  const repeatTutorialContext=vm.createContext({
+    settings:{reward:{aiWinEasy:90,aiWinNormal:110,aiWinHard:130,aiLoss:30,pvpWin:150,pvpLoss:50,pvpForfeitPenalty:30}},
+    game:{rewardClaimed:false,tutorial:{rewardEligible:false},aiOpponent:{level:"easy"},snapshot:()=>({})},
+    currentUser:()=>null,pvpSession:null,
+    profile:{currency:250,claimedPvpMatches:{},records:{tutorial:1,plays:4,aiPlays:3,wins:2,aiWins:2}},
+    save(){throw new Error("재도전 튜토리얼은 저장을 호출하면 안 됨");},
+    checkAchievements(){throw new Error("재도전 튜토리얼은 도전과제를 갱신하면 안 됨");},
+    notify(){throw new Error("재도전 튜토리얼은 보상 알림을 띄우면 안 됨");}
+  });
+  vm.runInContext(`${rewardFunction};grantMatchReward(0,{pvp:false});`,repeatTutorialContext);
+  assert.equal(repeatTutorialContext.profile.currency,250,"튜토리얼 재도전 보상 차단");
+  assert.deepEqual({...repeatTutorialContext.profile.records},{tutorial:1,plays:4,aiPlays:3,wins:2,aiWins:2},"튜토리얼 재도전 전적 및 도전과제 진행 차단");
+  assert.equal(repeatTutorialContext.game.rewardClaimed,true,"튜토리얼 재도전 중복 정산 차단");
 }
 
 assert.match(forfeitSql,/create or replace function public\.forfeit_match/,"서버 탈주 RPC 존재");
@@ -309,4 +359,4 @@ assert.match(forfeitSql,/\{winner\}', to_jsonb\(winner_index\)/,"상대 승리 �
 assert.match(forfeitSql,/'penalty', 30/,"서버 고정 탈주 페널티 30P");
 assert.match(forfeitSql,/delete from room_members where room_id = target\.room_id and user_id = actor/,"탈주자 방 멤버 제거");
 
-console.log(`OK: 카드 효과 ${declaredTypes.length}종 구현 확인, 동전/PvP 회귀 테스트 통과`);
+console.log(`OK: 카드 효과 ${declaredTypes.length}종 구현 확인, AI 덱/튜토리얼/동전/PvP 회귀 테스트 통과`);
