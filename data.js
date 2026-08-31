@@ -31,7 +31,7 @@ const settings = {
     { id: "brown", label: "갈색", color: "#a6891e" },
   ],
   retreatFallback: null,
-  reward: { win: 120, loss: 35 },
+  reward: { aiWin:240, aiLoss:100, pvpWin:320, pvpLoss:140 },
 };
 
 const cards = [
@@ -287,30 +287,42 @@ const cards = [
 ];
 
 const packs = [
-  { id:"pack_people_power", name:"국힘 카드팩", cardIds:[], price:170, description:"국민의힘 계열 인물과 관련 전략 카드를 넣는 팩입니다." },
-  { id:"pack_democratic", name:"민주당 카드팩", cardIds:[], price:180, description:"민주당 계열 인물과 관련 전략 카드를 넣는 팩입니다." },
-  { id:"pack_assembly", name:"22대 국회팩", cardIds:[], price:160, description:"22대 국회 인물과 의정 활동 전략 카드를 넣는 팩입니다." },
-  { id:"pack_president", name:"대통령 카드팩", cardIds:[], price:200, description:"역대·현직 대통령 카드와 대통령 관련 전략 카드를 넣는 팩입니다." },
-  { id:"pack_legacy", name:"죽은 정치인 카드팩", cardIds:[], price:150, description:"작고한 정치인 카드를 넣는 팩입니다." },
-  { id:"pack_legend", name:"레전드 정치인 카드팩", cardIds:[], price:240, description:"희귀도 높은 상징적 정치인 카드를 넣는 팩입니다." },
-  { id:"pack_independent", name:"비주류 정치인 카드팩", cardIds:[], price:140, description:"무소속·제3지대·비주류 정치인 카드를 넣는 팩입니다." },
-  { id:"pack_youth", name:"청년 정치인 카드팩", cardIds:[], price:120, description:"청년 정치인과 신진 정치인 카드를 넣는 팩입니다." },
+  { id:"pack_people_power", name:"국힘 카드팩", cardIds:[], price:220, description:"국민의힘 계열 인물과 관련 전략 카드를 넣는 팩입니다." },
+  { id:"pack_democratic", name:"민주당 카드팩", cardIds:[], price:240, description:"민주당 계열 인물과 관련 전략 카드를 넣는 팩입니다." },
+  { id:"pack_assembly", name:"22대 국회팩", cardIds:[], price:190, description:"22대 국회 인물과 의정 활동 전략 카드를 넣는 팩입니다." },
+  { id:"pack_president", name:"대통령 카드팩", cardIds:[], price:270, description:"역대·현직 대통령 카드와 대통령 관련 전략 카드를 넣는 팩입니다." },
+  { id:"pack_legacy", name:"죽은 정치인 카드팩", cardIds:[], price:170, description:"작고한 정치인 카드를 넣는 팩입니다." },
+  { id:"pack_legend", name:"레전드 정치인 카드팩", cardIds:[], price:300, description:"희귀도 높은 상징적 정치인 카드를 넣는 팩입니다." },
+  { id:"pack_independent", name:"비주류 정치인 카드팩", cardIds:[], price:120, description:"무소속·제3지대·비주류 정치인 카드를 넣는 팩입니다." },
+  { id:"pack_youth", name:"청년 정치인 카드팩", cardIds:[], price:100, description:"청년 정치인과 신진 정치인 카드를 넣는 팩입니다." },
 ];
 
 const achievements = [
-  { id:"first_play", title:"첫 출전", description:"대전을 1회 완료", metric:"plays", target:1, reward:50 },
-  { id:"play_5", title:"판이 커진다", description:"대전을 5회 완료", metric:"plays", target:5, reward:120 },
-  { id:"play_10", title:"정치 고인물 입문", description:"대전을 10회 완료", metric:"plays", target:10, reward:240 },
-  { id:"first_win", title:"첫 승리", description:"대전에서 1회 승리", metric:"wins", target:1, reward:100 },
-  { id:"win_3", title:"연승의 냄새", description:"대전에서 3회 승리", metric:"wins", target:3, reward:180 },
-  { id:"win_10", title:"선거의 제왕", description:"대전에서 10회 승리", metric:"wins", target:10, reward:500 },
-  { id:"open_1", title:"팩 맛보기", description:"카드팩 1회 개봉", metric:"packsOpened", target:1, reward:50 },
-  { id:"open_5", title:"팩을 찢는 손", description:"카드팩 5회 개봉", metric:"packsOpened", target:5, reward:180 },
-  { id:"collect_15", title:"수집가", description:"카드 15종 보유", metric:"ownedCards", target:15, reward:200 },
-  { id:"collect_all", title:"도감의 주인", description:"카드 30종 보유", metric:"ownedCards", target:30, reward:800 },
-  { id:"ssr_3", title:"SSR의 기운", description:"SSR 카드 3종 보유", metric:"ownedSSR", target:3, reward:220 },
-  { id:"ssr_6", title:"전설의 내각", description:"SSR 카드 6종 보유", metric:"ownedSSR", target:6, reward:600 },
-  { id:"tutorial_complete", title:"첫 의정 수업", description:"튜토리얼을 완료", metric:"tutorial", target:1, reward:80 },
+  { id:"first_play", category:"전투", title:"첫 출전", description:"대전을 1회 완료", metric:"plays", target:1, reward:100 },
+  { id:"play_5", category:"전투", title:"판이 커진다", description:"대전을 5회 완료", metric:"plays", target:5, reward:250 },
+  { id:"play_10", category:"전투", title:"정치 고인물 입문", description:"대전을 10회 완료", metric:"plays", target:10, reward:550 },
+  { id:"play_25", category:"전투", title:"선거판의 단골", description:"대전을 25회 완료", metric:"plays", target:25, reward:1100 },
+  { id:"first_win", category:"전투", title:"첫 승리", description:"대전에서 1회 승리", metric:"wins", target:1, reward:220 },
+  { id:"win_3", category:"전투", title:"연승의 냄새", description:"대전에서 3회 승리", metric:"wins", target:3, reward:480 },
+  { id:"win_10", category:"전투", title:"선거의 제왕", description:"대전에서 10회 승리", metric:"wins", target:10, reward:1100 },
+  { id:"win_25", category:"전투", title:"정치몬 챔피언", description:"대전에서 25회 승리", metric:"wins", target:25, reward:2000 },
+  { id:"ai_play_3", category:"AI 대전", title:"AI 분석관", description:"AI 대전을 3회 완료", metric:"aiPlays", target:3, reward:300 },
+  { id:"ai_win_5", category:"AI 대전", title:"알고리즘 킬러", description:"AI 대전에서 5회 승리", metric:"aiWins", target:5, reward:700 },
+  { id:"ai_win_15", category:"AI 대전", title:"싱글 플레이 마스터", description:"AI 대전에서 15회 승리", metric:"aiWins", target:15, reward:1500 },
+  { id:"pvp_play_1", category:"PvP", title:"실전 데뷔", description:"PvP 대전을 1회 완료", metric:"pvpPlays", target:1, reward:350 },
+  { id:"pvp_win_1", category:"PvP", title:"첫 실전 승리", description:"PvP 대전에서 1회 승리", metric:"pvpWins", target:1, reward:550 },
+  { id:"pvp_win_5", category:"PvP", title:"랭커의 기질", description:"PvP 대전에서 5회 승리", metric:"pvpWins", target:5, reward:1300 },
+  { id:"pvp_win_15", category:"PvP", title:"결투의 전설", description:"PvP 대전에서 15회 승리", metric:"pvpWins", target:15, reward:2600 },
+  { id:"open_1", category:"수집", title:"팩 맛보기", description:"카드팩 1회 개봉", metric:"packsOpened", target:1, reward:120 },
+  { id:"open_5", category:"수집", title:"팩을 찢는 손", description:"카드팩 5회 개봉", metric:"packsOpened", target:5, reward:350 },
+  { id:"open_15", category:"수집", title:"개봉 전문가", description:"카드팩 15회 개봉", metric:"packsOpened", target:15, reward:950 },
+  { id:"pull_50", category:"수집", title:"카드 더미", description:"카드를 50장 획득", metric:"cardsPulled", target:50, reward:750 },
+  { id:"collect_15", category:"수집", title:"수집가", description:"카드 15종 보유", metric:"ownedCards", target:15, reward:400 },
+  { id:"collect_30", category:"수집", title:"도감의 주인", description:"카드 30종 보유", metric:"ownedCards", target:30, reward:1000 },
+  { id:"collect_50", category:"수집", title:"정치몬 박물관", description:"카드 50종 보유", metric:"ownedCards", target:50, reward:1800 },
+  { id:"ssr_3", category:"수집", title:"SSR의 기운", description:"SSR 카드 3종 보유", metric:"ownedSSR", target:3, reward:500 },
+  { id:"ssr_6", category:"수집", title:"전설의 내각", description:"SSR 카드 6종 보유", metric:"ownedSSR", target:6, reward:1300 },
+  { id:"tutorial_complete", category:"학습", title:"첫 의정 수업", description:"튜토리얼을 완료", metric:"tutorial", target:1, reward:150 },
 ];
 
 // 전과 판정은 각 인물 카드의 tags에 "criminal_record"를 직접 붙여 관리합니다.

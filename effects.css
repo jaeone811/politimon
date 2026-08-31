@@ -90,3 +90,4 @@
 @media(max-width:700px){.damage-burst{min-width:min(250px,82vw);padding:11px 16px}.damage-burst span,.battle-card>em{font-size:9px}}
 .coin-flip .coin-tails{background:#b98236;background-image:none;color:transparent}
 @media(prefers-reduced-motion:reduce){.impact-shake #app,.damage-burst,.damage-burst::before,.battle-card>em,.action-veil.strategy::after{animation-duration:.01ms!important}}
+.achievement-category{display:inline-block;margin-top:8px;padding:3px 7px;border:1px solid #4d7494;border-radius:999px;color:var(--cyan);font:10px "DM Mono",monospace;font-style:normal}.achievement-categories small{font:10px "DM Mono",monospace}

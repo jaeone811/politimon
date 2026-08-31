@@ -7,7 +7,7 @@ const defaultProfile = () => ({
   deck: [...STARTER_DECK],
   currency: 500,
   achievements: {},
-  records: { wins:0, losses:0, plays:0, packsOpened:0, cardsPulled:0, tutorial:0 }
+  records: { wins:0, losses:0, plays:0, aiPlays:0, aiWins:0, pvpPlays:0, pvpWins:0, packsOpened:0, cardsPulled:0, tutorial:0 }
 });
 function normalizeProfile(profile) {
   const base = defaultProfile(), records = { ...base.records, ...(profile.records||{}) };
