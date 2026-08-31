@@ -5,7 +5,7 @@ const STARTER_COLLECTION = Object.fromEntries(STARTER_DECK.map(id=>[id,1]));
 const defaultProfile = () => ({
   collection: { ...STARTER_COLLECTION },
   deck: [...STARTER_DECK],
-  currency: 500,
+  currency: 250,
   achievements: {},
   records: { wins:0, losses:0, plays:0, aiPlays:0, aiWins:0, pvpPlays:0, pvpWins:0, packsOpened:0, cardsPulled:0, tutorial:0 }
 });
