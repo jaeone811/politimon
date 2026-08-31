@@ -32,6 +32,7 @@
     async startMatch(roomId, state, turnUserId) { await clientReady; if (!client) throw new Error("실시간 PvP는 Supabase 연결 후 사용할 수 있습니다."); const { data, error } = await client.rpc("start_match", { p_room_id:roomId, p_state:state, p_turn_user_id:turnUserId }); if (error) throw error; return data; },
     async getMatch(roomId) { await clientReady; if (!client) return null; const { data, error } = await client.rpc("get_match", { p_room_id:roomId }); if (error) throw error; return data; },
     async submitMatchState(matchId, version, state, nextTurnUserId, action) { await clientReady; if (!client) throw new Error("실시간 PvP는 Supabase 연결 후 사용할 수 있습니다."); const { data, error } = await client.rpc("submit_match_state", { p_match_id:matchId, p_expected_version:version, p_state:state, p_next_turn_user_id:nextTurnUserId, p_action:action }); if (error) throw error; return data; },
+    async forfeitMatch(matchId, version) { await clientReady; if (!client) throw new Error("실시간 PvP는 Supabase 연결 후 사용할 수 있습니다."); const { data, error } = await client.rpc("forfeit_match", { p_match_id:matchId, p_expected_version:version }); if (error) throw error; return data; },
     subscribeMatch(roomId, onMatch, onError=()=>{}) {
       let channel=null, stopped=false;
       const refresh=async()=>{ try { const match=await api.getMatch(roomId); if (!stopped && match?.state && Object.keys(match.state).length) onMatch(match); } catch(error) { if(!stopped) onError(error); } };

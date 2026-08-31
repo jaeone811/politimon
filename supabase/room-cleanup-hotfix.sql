@@ -8,7 +8,9 @@ begin
   if auth.uid() is null then raise exception '로그인이 필요합니다'; end if;
   select * into target from rooms where id = p_room_id for update;
   if not found then return jsonb_build_object('deleted', true); end if;
-  if target.status <> 'waiting' then raise exception '게임이 시작된 방에서는 나갈 수 없습니다'; end if;
+  if target.status <> 'waiting' and not exists (select 1 from matches where room_id = p_room_id and status = 'finished') then
+    raise exception '진행 중인 대전은 전투 화면의 방 나가기를 이용해 주세요';
+  end if;
   if not exists (select 1 from room_members where room_id = p_room_id and user_id = auth.uid()) then raise exception '이 방의 참가자가 아닙니다'; end if;
   delete from room_members where room_id = p_room_id and user_id = auth.uid();
   if not exists (select 1 from room_members where room_id = p_room_id) then
