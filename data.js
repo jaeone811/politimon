@@ -45,7 +45,7 @@ const cards = [
   // trait 필드는 선택 사항입니다. 아래처럼 생략하면 게임에서 "특성 없음"으로 표시됩니다.
   { id:"character_04", name:"박근혜", type:"character", rarity:"RR", attribute:"red", hp:190, weakness:"blue", resistance:"yellow", retreatCost:{any:3}, tags:["female","criminal_record"],
     trait:{name:"박정희의 딸", description:"10 피해. 상대 인물 카드 속성이 빨간색이 아닌 경우 추가 피해 20", effects:[{type:"bonusDamageUnlessEnemyAttribute",attribute:"red",amount:20},{type:"damage",amount:10}]},
-    skills:[{name:"사드 배치", cost:{red:2}, description:"현재 박근혜의 체력이 100 이상일 경우 추가 피해 20. 기본 50 피해", effects:[{type:"bonusDamageIfSelfHpAtLeast",threshold:100,amount:20},{type:"damage",amount:50}]}] },
+    skills:[{name:"사드 배치", cost:{red:2}, description:"현재 박근혜의 체력이 100 이상일 경우 추가 피해 10. 기본 40 피해", effects:[{type:"bonusDamageIfSelfHpAtLeast",threshold:100,amount:10},{type:"damage",amount:40}]}] },
   { id:"strategy_01", name:"선동", type:"strategy", rarity:"U", description:"상대에게서 원하는 토큰 1개를 빼앗아옵니다.", effects:[{type:"stealToken",amount:1}] },
   { id:"strategy_02", name:"녹취록", type:"strategy", rarity:"R", description:"상대 핸드에 있는 카드 1장을 무작위로 보고 다시 돌려줍니다.", effects:[{type:"revealRandomHand",amount:1}] },
   { id:"strategy_03", name:"감옥", type:"strategy", rarity:"R", description:"바로 다음 상대의 차례 때 기술을 사용할 수 없습니다. 전략 카드와 특성은 사용할 수 있습니다.", effects:[{type:"blockOpponentNextSkill"}] },
@@ -83,7 +83,7 @@ const cards = [
     trait:{name:"지옥에서 돌아온 자", description:"20 피해. 이 특성으로 상대 인물 카드를 죽이면 이 카드의 체력을 20 회복합니다.", effects:[{type:"healSelfIfDefeats",amount:20},{type:"damage",amount:20}]},
     skills:[{name:"관세", cost:{white:3}, description:"상대방의 토큰 중 아무거나 1개를 흰색으로 바꿉니다. 흰색 토큰은 기술 재화가 아무 토큰일 때만 사용할 수 있습니다. 80 피해", effects:[{type:"convertEnemyToken",to:"white",amount:1},{type:"damage",amount:80}]}] },
   { id:"character_16", name:"조 바이든", type:"character", rarity:"C", attribute:"white", hp:140, weakness:"red", resistance:"blue", retreatCost:{any:3}, tags:["foreign","usa"],
-    trait:{name:"치매", description:"20 피해. 이 카드에 10 피해를 주고 동전 뒤집기를 할 수 있습니다. 앞면이면 상대 인물 카드에 추가로 20 피해.", effects:[{type:"selfDamage",amount:10},{type:"coinFlipDamageModifier",headsBonus:20,tailsBonus:0},{type:"damage",amount:20}]},
+    trait:{name:"치매", description:"20 피해. 이 카드에 10 피해를 주고 동전 뒤집기를 할 수 있습니다. 앞면이면 상대 인물 카드에 추가로 20 피해.", effects:[{type:"selfDamage",amount:10,optionalCoinCost:true},{type:"coinFlipDamageModifier",optional:true,headsBonus:20,tailsBonus:0},{type:"damage",amount:20}]},
     skills:[{name:"부정선거", cost:{white:2}, description:"자신의 토큰 1개를 원하는 색으로 바꿉니다. 40 피해", effects:[{type:"convertOwnTokenToActiveAttribute",amount:1},{type:"damage",amount:40}]}] },
   { id:"character_17", name:"조지 W. 부시", type:"character", rarity:"C", attribute:"white", hp:150, weakness:"brown", resistance:"blue", retreatCost:{any:3}, tags:["foreign","usa","criminal_record"],
     trait:{name:"테러와의 전쟁", description:"10 피해. 상대 인물 속성이 하얀색을 제외한 나머지 속성이라면 -10", effects:[{type:"bonusDamageUnlessEnemyAttribute",attribute:"white",amount:-10},{type:"damage",amount:10}]},
