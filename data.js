@@ -31,7 +31,7 @@ const settings = {
     { id: "brown", label: "갈색", color: "#a6891e" },
   ],
   retreatFallback: null,
-  reward: { aiWin:60, aiLoss:15, pvpWin:90, pvpLoss:25 },
+  reward: { aiWin:60, aiLoss:15, pvpWin:90, pvpLoss:25, pvpForfeitPenalty:30 },
 };
 
 const cards = [
@@ -44,7 +44,7 @@ const cards = [
     skills:[{name:"갈라치기", cost:{blue:2}, description:"상대 필드에 여성 인물 카드가 있다면 +10. 기본 50 피해", effects:[{type:"bonusDamageIfEnemyTag",tag:"female",amount:10},{type:"damage",amount:50}]},{name:"미안하다 고맙다", cost:{blue:2, any:1}, description:"80 피해. 이 공격으로 상대 인물이 죽고 체력이 0 아래로 내려가면, 다음에 배치된 인물에게 초과 피해를 입힙니다.", effects:[{type:"damage",amount:80,overflowToReplacement:true}]}] },
   // trait 필드는 선택 사항입니다. 아래처럼 생략하면 게임에서 "특성 없음"으로 표시됩니다.
   { id:"character_04", name:"박근혜", type:"character", rarity:"RR", attribute:"red", hp:190, weakness:"blue", resistance:"yellow", retreatCost:{any:3}, tags:["female","criminal_record"],
-    trait:{name:"박정희의 딸", description:"10 피해. 상대 인물 카드 속성이 빨간색이 아닌 경우 추가 피해 20", effects:[{type:"bonusDamageUnlessEnemyAttribute",attribute:"red",amount:20},{type:"damage",amount:10}]},
+    trait:{name:"박정희의 딸", description:"10 피해. 상대 인물 카드 속성이 빨간색이 아닌 경우 추가 피해 10", effects:[{type:"bonusDamageUnlessEnemyAttribute",attribute:"red",amount:10},{type:"damage",amount:10}]},
     skills:[{name:"사드 배치", cost:{red:2}, description:"현재 박근혜의 체력이 100 이상일 경우 추가 피해 10. 기본 40 피해", effects:[{type:"bonusDamageIfSelfHpAtLeast",threshold:100,amount:10},{type:"damage",amount:40}]}] },
   { id:"strategy_01", name:"선동", type:"strategy", rarity:"U", description:"상대에게서 원하는 토큰 1개를 빼앗아옵니다.", effects:[{type:"stealToken",amount:1}] },
   { id:"strategy_02", name:"녹취록", type:"strategy", rarity:"R", description:"상대 핸드에 있는 카드 1장을 무작위로 보고 다시 돌려줍니다.", effects:[{type:"revealRandomHand",amount:1}] },
