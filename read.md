@@ -48,6 +48,10 @@
 
 글쓴이 본인 또는 개발자 계정으로 갤러리 글을 삭제하려면 [supabase/gallery-moderation-hotfix.sql](supabase/gallery-moderation-hotfix.sql)을 같은 방법으로 한 번 실행하세요. 이 파일을 실행하지 않으면 `delete_gallery_post` 함수를 찾을 수 없다는 오류가 납니다.
 
+### v1.1.1 중복 보상 SQL · 실행 대기
+
+[supabase/v1.1.1-compensation.sql](supabase/v1.1.1-compensation.sql)은 아직 운영 Supabase에 실행하지 않은 상태로 보관합니다. 웹 파일 배포가 끝난 뒤 SQL Editor에서 한 번 실행해야 패치 시점의 기존 가입자에게 200P가 지급됩니다. 캠페인 ID와 계정별 지급 기록을 기준으로 중복 실행을 막도록 작성되어 있지만, 실행 전에는 운영 데이터베이스 백업과 대상 사용자 수를 먼저 확인하세요.
+
 ### 로그인 켜기
 
 1. 왼쪽 메뉴 `Authentication` → `Providers`(또는 `Sign In / Providers`)를 엽니다.

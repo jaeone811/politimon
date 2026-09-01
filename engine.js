@@ -147,7 +147,7 @@ class GameEngine {
     const rarityRank=id=>RARITIES.indexOf(cardById[id]?.rarity)<0?RARITIES.length:RARITIES.indexOf(cardById[id]?.rarity);
     const stealOne=(me,enemy,color=context.stealColor)=>{
       const selected=color&&settings.tokenTypes.includes(color)&&((enemy.tokens[color]||0)>0)?color:null;
-      const fallback=settings.tokenTypes.slice().sort((a,b)=>(enemy.tokens[b]||0)-(enemy.tokens[a]||0)).find(c=>(enemy.tokens[c]||0)>0);
+      const fallback=color?null:settings.tokenTypes.slice().sort((a,b)=>(enemy.tokens[b]||0)-(enemy.tokens[a]||0)).find(c=>(enemy.tokens[c]||0)>0);
       const picked=selected||fallback;
       if(!picked)return false;
       enemy.tokens[picked]--;me.tokens[picked]=(me.tokens[picked]||0)+1;
@@ -224,7 +224,7 @@ class GameEngine {
         if(before!==after)this.emit(`${me.active.name}(으)로 상태가 바뀌었습니다. 속성: ${settings.tokenLabels[me.active.attribute]||me.active.attribute}`);
         continue;
       }
-      if(e.type?.startsWith("bonusDamage")){nextDamageBonus+=this.bonusDamage(source,e);continue;}
+      if(e.type?.startsWith("bonusDamage")&&e.type!=="bonusDamageForOwnTokenColorThenSpend"){nextDamageBonus+=this.bonusDamage(source,e);continue;}
       if(e.type==="guessRandomHandCardAttributeBonus"){
         const hidden=enemy.hand.slice();
         const picked=context.guessedHandId&&hidden.includes(context.guessedHandId)?context.guessedHandId:hidden[Math.floor(Math.random()*hidden.length)];
@@ -263,6 +263,7 @@ class GameEngine {
       if(e.type==="nextTurnSkillDamageBonusIfEnemyAttribute"){if(enemy.active?.attribute===e.attribute){me.skillDamageBonusNextTurn+=(e.amount||0);this.emit(`${me.name}의 다음 턴 기술 피해가 ${e.amount} 증가합니다.`);}continue;}
       if(e.type==="nextTurnExtraToken"){me.nextTurnExtraTokens+=(e.amount||1);this.emit(`${me.name}은(는) 다음 턴 종료 시 토큰을 추가로 받습니다.`);continue;}
       if(e.type==="allowExtraSkill"){this.state.actionAvailable=true;this.emit(`${me.name}은(는) 기술을 한 번 더 사용할 수 있습니다.`);continue;}
+      if(e.type==="allowExtraAction"){this.state.actionAvailable=true;me.traitUsedThisTurn=false;this.emit(`${me.name}은(는) 기술 또는 특성을 한 번 더 사용할 수 있습니다.`);continue;}
       if(e.type==="allowTraitAfterSkill"){me.traitAfterSkillAvailable=true;this.emit(`${me.name}은(는) 이 기술 후 특성을 사용할 수 있습니다.`);continue;}
       if(e.type==="allowFreeRetreatThisTurn"){me.freeRetreatThisTurn=true;this.emit(`${me.name}은(는) 이번 턴 비용 없이 후퇴할 수 있습니다.`);continue;}
       if(e.type==="shieldPackFromOpponentEffectsNextTurn"){me.protectedPackNextOpponentTurn={packId:e.packId};this.emit(`${me.name}의 ${packs.find(p=>p.id===e.packId)?.name||e.packId} 인물이 다음 상대 턴에 보호됩니다.`);continue;}
@@ -282,6 +283,15 @@ class GameEngine {
       if(e.type==="convertOwnTokenToChosenColor"){const to=context.tokenColor||me.active?.attribute||settings.tokenTypes[0];for(let i=0;i<(e.amount||1);i++)if(this.convertToken(me,null,to))this.emit(`${me.name}의 토큰 1개가 ${settings.tokenLabels[to]||to}(으)로 바뀌었습니다.`);continue;}
       if(e.type==="convertAllEnemyTokensByColor"){const from=e.from,to=context.tokenColor||me.active?.attribute||settings.tokenTypes[0],count=enemy.tokens[from]||0;if(count){enemy.tokens[from]=0;enemy.tokens[to]=(enemy.tokens[to]||0)+count;this.emit(`${enemy.name}의 ${settings.tokenLabels[from]||from} 토큰 ${count}개가 ${settings.tokenLabels[to]||to}(으)로 바뀌었습니다.`);}continue;}
       if(e.type==="changeSelfAttribute"&&me.active){const to=context.tokenColor||me.active.attribute;if(settings.tokenTypes.includes(to)){me.active.attribute=to;this.emit(`${me.active.name}의 속성이 ${settings.tokenLabels[to]||to}(으)로 바뀌었습니다.`);}continue;}
+      if(e.type==="toggleSelfForm"&&me.active?.forms?.length){
+        const currentIndex=Math.max(0,me.active.forms.findIndex(form=>form.id===me.active.formId));
+        const form=me.active.forms[(currentIndex+1)%me.active.forms.length];
+        const currentHp=me.active.currentHp;
+        Object.assign(me.active,{formId:form.id,name:form.name,image:form.image,attribute:form.attribute,weakness:form.weakness,resistance:form.resistance,skills:clone(form.skills||[])});
+        me.active.currentHp=currentHp;
+        this.emit(`${me.active.name}(으)로 폼 체인지했습니다. 현재 HP ${currentHp}은(는) 유지됩니다.`);
+        continue;
+      }
       if(e.type==="increaseMaxHp"&&me.active){me.active.hp+=(e.amount||0);this.emit(`${me.active.name}의 최대 HP가 ${e.amount||0} 증가했습니다.`);continue;}
       if(e.type==="decreaseMaxHp"&&me.active){me.active.hp=Math.max(10,me.active.hp-(e.amount||0));me.active.currentHp=Math.min(me.active.currentHp,me.active.hp);this.emit(`${me.active.name}의 최대 HP가 ${e.amount||0} 감소했습니다.`);continue;}
       if(e.type==="healIfSelfTag"){if(me.active?.tags?.includes(e.tag)){me.active.currentHp=Math.min(me.active.hp,me.active.currentHp+(e.amount||0));this.emit(`${me.active.name}의 HP를 ${e.amount||0} 회복했습니다.`);}continue;}
@@ -337,6 +347,7 @@ class GameEngine {
       }
       if(e.type==="sendEnemyActiveToDeck"){if(enemy.active&&enemy.protectedPackThisTurn?.packId&&enemy.active.packIds?.includes(enemy.protectedPackThisTurn.packId))this.emit(`${enemy.active.name}은(는) 보호 효과로 덱으로 돌아가지 않습니다.`);else returnActiveToDeck(1-source);continue;}
       if(e.type==="sendEnemyActiveToDeckIfPackNotName"){if(enemy.active?.type==="character"&&enemy.active?.packIds?.includes(e.packId)&&enemy.active?.name!==e.name){if(enemy.protectedPackThisTurn?.packId&&enemy.active.packIds?.includes(enemy.protectedPackThisTurn.packId))this.emit(`${enemy.active.name}은(는) 보호 효과로 덱으로 돌아가지 않습니다.`);else returnActiveToDeck(1-source);}else this.emit(`${enemy.active?.name||"상대 인물"}은(는) 효과 대상이 아닙니다.`);continue;}
+      if(e.type==="sendEnemyActiveToDeckIfNameIn"){if(enemy.active?.type==="character"&&(e.names||[]).includes(enemy.active.name)){if(enemy.protectedPackThisTurn?.packId&&enemy.active.packIds?.includes(enemy.protectedPackThisTurn.packId))this.emit(`${enemy.active.name}은(는) 보호 효과로 덱으로 돌아가지 않습니다.`);else returnActiveToDeck(1-source);}else this.emit(`${enemy.active?.name||"상대 인물"}은(는) 효과 대상이 아닙니다.`);continue;}
       if(e.type==="toggleOwnActiveGender"&&me.active){const tags=new Set(me.active.tags||[]);if(tags.has("female")){tags.delete("female");tags.add("male");this.emit(`${me.active.name}의 성별 태그가 남성으로 바뀌었습니다.`);}else{tags.delete("male");tags.add("female");this.emit(`${me.active.name}의 성별 태그가 여성으로 바뀌었습니다.`);}me.active.tags=[...tags];continue;}
       if(e.type==="discardEnemyTokens"){let total=0;settings.tokenTypes.forEach(c=>{total+=enemy.tokens[c]||0;enemy.tokens[c]=0;});this.emit(`${enemy.name}의 토큰 ${total}개를 모두 트래쉬했습니다.`);continue;}
       if(e.type==="stealSpecificToken"){for(let i=0;i<(e.amount||1);i++)stealOne(me,enemy,e.color);continue;}
