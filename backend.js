@@ -8,7 +8,21 @@
   let client = null;
   const clientReady = configured ? import("https://esm.sh/@supabase/supabase-js@2").then(({ createClient }) => client = createClient(config.url, config.anonKey)) : Promise.resolve(null);
   const localUserKey = "politimon-preview-user-v1";
+  const previewUsersKey = "politimon-preview-users-v1";
   const previewUser = () => local(localUserKey, null);
+  const previewAccount = (email, displayName="") => {
+    const normalizedEmail = String(email || "").trim().toLowerCase(), users = local(previewUsersKey, {}), current = previewUser();
+    const existing = users[normalizedEmail] || (String(current?.email || "").toLowerCase() === normalizedEmail ? current : null);
+    const user = existing || { id:id(), email:normalizedEmail, user_metadata:{ display_name:displayName || normalizedEmail.split("@")[0] } };
+    if (displayName) user.user_metadata = { ...(user.user_metadata || {}), display_name:displayName };
+    users[normalizedEmail] = user;
+    put(previewUsersKey, users);
+    return user;
+  };
+  const seoulDateKey = value => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone:"Asia/Seoul", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date(value)).map(part=>[part.type,part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
   const usersRoom = room => ({ ...room, members: room.members || [] });
   const api = {
     configured,
@@ -16,8 +30,9 @@
     async getDeveloperProfile(userId) { await clientReady; if (!client || !userId) return { is_developer: false }; const { data, error } = await client.from("profiles").select("is_developer").eq("id", userId).maybeSingle(); if (error) throw error; return data || { is_developer: false }; },
     async getGameProfile(userId) { await clientReady; if (!userId) return null; if (!client) return local(`politimon-preview-game-profile-v1:${userId}`, null); const { data, error } = await client.rpc("get_game_profile"); if (error) throw error; return data || null; },
     async saveGameProfile(userId, profile, expectedRevision, seasonId) { await clientReady; if (!userId) throw new Error("로그인이 필요합니다."); if (!client) { const key=`politimon-preview-game-profile-v1:${userId}`,prior=local(key,null),revision=Number(prior?.revision||0)+1,result={profile,revision,seasonId,updatedAt:new Date().toISOString()};put(key,result);return result; } const { data, error } = await client.rpc("save_game_profile", { p_profile:profile, p_expected_revision:expectedRevision??null, p_season_id:seasonId }); if (error) throw error; return data; },
-    async signUp(email, password, displayName) { await clientReady; if (!client) { const user = { id: id(), email, user_metadata: { display_name: displayName || email.split("@")[0] } }; put(localUserKey, user); return { user, session: { user }, preview: true, needsEmailConfirmation: false }; } const { data, error } = await client.auth.signUp({ email, password, options: { data: { display_name: displayName } } }); if (error) throw error; return { user: data.user, session: data.session, needsEmailConfirmation: !data.session }; },
-    async signIn(email, password) { await clientReady; if (!client) { const user = { id: id(), email, user_metadata: { display_name: email.split("@")[0] } }; put(localUserKey, user); return { user, preview: true }; } const { data, error } = await client.auth.signInWithPassword({ email, password }); if (error) throw error; return data.session; },
+    async claimDailyLoginReward(userId, now=new Date()) { await clientReady; if (!userId) throw new Error("로그인이 필요합니다."); if (!client) { const profileKey=`politimon-preview-game-profile-v1:${userId}`,rewardKey=`politimon-preview-daily-login-v1:${userId}`,saved=local(profileKey,null);if(!saved)throw new Error("게임 프로필을 먼저 만들어야 합니다.");const date=seoulDateKey(now),last=local(rewardKey,null);if(last?.date===date)return{...saved,claimed:false,amount:0,date};const profile=JSON.parse(JSON.stringify(saved.profile||{}));profile.currency=Number(profile.currency||0)+50;const result={profile,revision:Number(saved.revision||0)+1,seasonId:saved.seasonId,updatedAt:new Date().toISOString(),claimed:true,amount:50,date};put(profileKey,{profile:result.profile,revision:result.revision,seasonId:result.seasonId,updatedAt:result.updatedAt});put(rewardKey,{date,amount:50});return result; } const { data, error } = await client.rpc("claim_daily_login_reward"); if (error) throw error; return data; },
+    async signUp(email, password, displayName) { await clientReady; if (!client) { const user=previewAccount(email,displayName); put(localUserKey, user); return { user, session: { user }, preview: true, needsEmailConfirmation: false }; } const { data, error } = await client.auth.signUp({ email, password, options: { data: { display_name: displayName } } }); if (error) throw error; return { user: data.user, session: data.session, needsEmailConfirmation: !data.session }; },
+    async signIn(email, password) { await clientReady; if (!client) { const user=previewAccount(email); put(localUserKey, user); return { user, preview: true }; } const { data, error } = await client.auth.signInWithPassword({ email, password }); if (error) throw error; return data.session; },
     async signOut() { await clientReady; if (!client) { localStorage.removeItem(localUserKey); return; } const { error } = await client.auth.signOut(); if (error) throw error; },
     async deleteAccount() { await clientReady; if (!client) { localStorage.removeItem(localUserKey); return; } const { error } = await client.functions.invoke("delete-account"); if (error) throw error; await client.auth.signOut({ scope:"local" }); },
     async listPosts() { await clientReady; if (!client) return local("politimon-preview-posts-v1", []).sort((a,b) => b.created_at.localeCompare(a.created_at)); const { data, error } = await client.from("gallery_posts").select("id,author_id,title,body,created_at,profiles(display_name)").order("created_at", { ascending:false }).limit(100); if (error) throw error; return data.map(post => ({ ...post, author: post.profiles?.display_name || "익명" })); },

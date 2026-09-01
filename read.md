@@ -52,6 +52,12 @@
 
 [supabase/v1.1.1-compensation.sql](supabase/v1.1.1-compensation.sql)은 아직 운영 Supabase에 실행하지 않은 상태로 보관합니다. 웹 파일 배포가 끝난 뒤 SQL Editor에서 한 번 실행해야 패치 시점의 기존 가입자에게 200P가 지급됩니다. 캠페인 ID와 계정별 지급 기록을 기준으로 중복 실행을 막도록 작성되어 있지만, 실행 전에는 운영 데이터베이스 백업과 대상 사용자 수를 먼저 확인하세요.
 
+### 매일 첫 로그인 출석 보상 50P
+
+[supabase/daily-login-reward.sql](supabase/daily-login-reward.sql)은 [supabase/game-profile-sync.sql](supabase/game-profile-sync.sql)을 적용한 뒤 SQL Editor에서 한 번 실행하세요. 한국 시간 기준으로 매일 첫 로그인에만 50P를 지급하며, 같은 날 재로그인하거나 요청이 동시에 들어와도 계정별로 한 번만 지급됩니다.
+
+이 파일은 아직 실행하지 않은 `v1.1.1-compensation.sql`과 독립적입니다. 출석 보상 SQL을 먼저 적용해도 기존 가입자 200P 보상 대상이나 지급 기록은 바뀌지 않습니다.
+
 ### 로그인 켜기
 
 1. 왼쪽 메뉴 `Authentication` → `Providers`(또는 `Sign In / Providers`)를 엽니다.

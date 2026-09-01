@@ -10,6 +10,7 @@ const storageSource=fs.readFileSync(new URL("./storage.js",import.meta.url),"utf
 const forfeitSql=fs.readFileSync(new URL("./supabase/pvp-forfeit-hotfix.sql",import.meta.url),"utf8");
 const gameProfileSql=fs.readFileSync(new URL("./supabase/game-profile-sync.sql",import.meta.url),"utf8");
 const compensationSql=fs.readFileSync(new URL("./supabase/v1.1.1-compensation.sql",import.meta.url),"utf8");
+const dailyRewardSql=fs.readFileSync(new URL("./supabase/daily-login-reward.sql",import.meta.url),"utf8");
 const context=vm.createContext({console,Math,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},window:{dispatchEvent(){}}});
 vm.runInContext(`${dataSource}\n${engineSource}\nglobalThis.testExports={cards,cardById,settings,achievements,GameEngine};`,context);
 const {cards,cardById,settings,achievements,GameEngine}=context.testExports;
@@ -101,7 +102,7 @@ assert.match(appSource,/rewardEligible:\(profile\.records\?\.tutorial\|\|0\)<1/,
   assert.match(appSource,/function syncAccountGameProfile[\s\S]{0,1800}getGameProfile[\s\S]{0,1800}saveGameProfile/,"로그인 시 서버 프로필 로드 또는 최초 이전");
   assert.match(appSource,/const save = \(\) => \{ saveProfile\(profile,authSession\?\.user\?\.id\|\|null\);queueServerProfileSave\(\)/,"모든 진행 저장 시 계정별 서버 동기화 예약");
   assert.match(appSource,/game_profile_revision_conflict/,"다른 기기 동시 저장 충돌 감지");
-  assert.match(appSource,/if\(session\?\.user\)await syncAccountGameProfile\(\)/,"자동 로그인 시 서버 진행 불러오기");
+  assert.match(appSource,/if\(session\?\.user\)\{await syncAccountGameProfile\(\);reward=await claimDailyLoginReward\(\);\}/,"자동 로그인 시 서버 진행 및 출석 보상 불러오기");
   assert.match(gameProfileSql,/create table if not exists public\.game_profiles/,"게임 진행 서버 테이블");
   ["collection","deck","currency","achievements","claimed_pvp_matches","records","season_id","revision"].forEach(column=>assert.match(gameProfileSql,new RegExp(`\\b${column}\\b`),`서버 진행 필드 ${column}`));
   assert.match(gameProfileSql,/where user_id = auth\.uid\(\)/,"본인 계정 진행만 조회");
@@ -471,9 +472,30 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 {
   const values=new Map();let nextId=0;
   const localStorage={getItem:key=>values.has(key)?values.get(key):null,setItem:(key,value)=>values.set(key,String(value)),removeItem:key=>values.delete(key)};
-  const backendContext=vm.createContext({console,window:{POLITIMON_SUPABASE:{}},localStorage,crypto:{randomUUID:()=>`preview-${++nextId}`},Date,Math,JSON,Promise});
+  const backendContext=vm.createContext({console,window:{POLITIMON_SUPABASE:{}},localStorage,crypto:{randomUUID:()=>`preview-${++nextId}`},Date,Intl,Math,JSON,Promise});
   vm.runInContext(backendSource,backendContext);
   const api=backendContext.window.politimonBackend;
+  const attendanceEmail="attendance@example.test",attendance=(await api.signUp(attendanceEmail,"pw","출석자")).user;
+  await api.saveGameProfile(attendance.id,{collection:{},deck:[],currency:250,achievements:{},claimedPvpMatches:{},records:{}},null,"season-1");
+  const firstReward=await api.claimDailyLoginReward(attendance.id,new Date("2026-09-01T15:00:01.000Z"));
+  assert.equal(firstReward.claimed,true,"한국 날짜 기준 첫 로그인 출석 보상 지급");
+  assert.equal(firstReward.amount,50,"출석 보상 50P");
+  assert.equal(firstReward.profile.currency,300,"출석 보상 지급 후 프로필 재화 반영");
+  assert.equal(firstReward.revision,2,"출석 보상 지급과 프로필 버전 원자적 갱신");
+  await api.signOut();
+  const relogin=(await api.signIn(attendanceEmail,"pw")).user;
+  assert.equal(relogin.id,attendance.id,"미리보기 재로그인에서도 동일 계정 유지");
+  const repeatedReward=await api.claimDailyLoginReward(relogin.id,new Date("2026-09-02T14:59:59.000Z"));
+  assert.equal(repeatedReward.claimed,false,"같은 한국 날짜 재로그인 중복 지급 차단");
+  assert.equal(repeatedReward.amount,0,"중복 로그인 보상 0P");
+  assert.equal(repeatedReward.profile.currency,300,"중복 로그인 후 재화 불변");
+  assert.equal(repeatedReward.revision,2,"중복 로그인 후 프로필 버전 불변");
+  const nextDayReward=await api.claimDailyLoginReward(relogin.id,new Date("2026-09-02T15:00:00.000Z"));
+  assert.equal(nextDayReward.claimed,true,"한국 자정 이후 다음 날 출석 보상 지급");
+  assert.equal(nextDayReward.profile.currency,350,"다음 날 50P 추가 지급");
+  const nextDayRepeated=await api.claimDailyLoginReward(relogin.id,new Date("2026-09-02T23:00:00.000Z"));
+  assert.equal(nextDayRepeated.claimed,false,"다음 날도 두 번째 로그인 중복 지급 차단");
+  assert.equal(nextDayRepeated.profile.currency,350,"여러 번 로그인해도 하루 총 50P만 지급");
   const host=(await api.signUp("host@example.test","pw","방장")).user;
   const room=await api.createRoom({title:"회귀 테스트 방",isPrivate:true,password:"1234"},host);
   assert.equal(room.members.length,1,"멀티플레이 미리보기 방 생성");
@@ -494,6 +516,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   assert.equal(await api.getRoom(room.id),null,"삭제된 방 재조회 불가");
   assert.match(backendSource,/rpc\("submit_match_state", \{ p_match_id:matchId, p_expected_version:version, p_state:state, p_next_turn_user_id:nextTurnUserId, p_action:action \}\)/,"Supabase PvP 상태 저장 RPC 인자 보존");
   assert.match(backendSource,/rpc\("forfeit_match", \{ p_match_id:matchId, p_expected_version:version \}\)/,"Supabase PvP 탈주 RPC 버전 검증 인자 보존");
+  assert.match(backendSource,/rpc\("claim_daily_login_reward"\)/,"운영 서버 출석 보상 RPC 연결");
 }
 
 {
@@ -533,6 +556,17 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   assert.match(compensationSql,/currency = profiles\.currency \+ claimed\.amount/,"기존 게임 프로필 200P 즉시 지급");
   assert.match(compensationSql,/before insert on public\.game_profiles/,"아직 게임 프로필 없는 기존 가입자 첫 저장 지급");
   assert.match(compensationSql,/on conflict \(patch_id\) do nothing/,"보상 캠페인 재실행 중복 방지");
+}
+
+{
+  assert.match(dailyRewardSql,/reward_amount constant integer := 50/,"일일 출석 보상 50P 고정");
+  assert.match(dailyRewardSql,/timezone\('Asia\/Seoul', now\(\)\)::date/,"출석일 한국 표준시 기준");
+  assert.match(dailyRewardSql,/last_daily_login_date is distinct from reward_date/,"같은 날 중복 지급 조건 차단");
+  assert.match(dailyRewardSql,/currency = currency \+ reward_amount[\s\S]*revision = revision \+ 1/,"재화와 프로필 버전 동시 갱신");
+  assert.match(dailyRewardSql,/grant execute on function public\.claim_daily_login_reward\(\) to authenticated/,"인증 사용자만 출석 보상 실행");
+  const claimCalls=appSource.match(/await claimDailyLoginReward\(\)/g)||[];
+  assert.equal(claimCalls.length,5,"회원가입·두 로그인 화면·자동 로그인에 출석 확인 연결");
+  assert.match(appSource,/pushNotification\("오늘의 출석 보상",`매일 첫 로그인 보상/,"출석 지급 알림 기록");
 }
 
 {
@@ -595,4 +629,4 @@ assert.match(forfeitSql,/\{winner\}', to_jsonb\(winner_index\)/,"상대 승리 �
 assert.match(forfeitSql,/'penalty', 30/,"서버 고정 탈주 페널티 30P");
 assert.match(forfeitSql,/delete from room_members where room_id = target\.room_id and user_id = actor/,"탈주자 방 멤버 제거");
 
-console.log(`OK: 카드 효과 ${declaredTypes.length}종, AI 모의 대전 12회, 튜토리얼/동전/PvP 회귀 테스트 통과`);
+console.log(`OK: 출석 보상 중복 로그인, 카드 효과 ${declaredTypes.length}종, AI 모의 대전 12회, 튜토리얼/동전/PvP 회귀 테스트 통과`);
