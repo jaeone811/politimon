@@ -11,6 +11,7 @@ const forfeitSql=fs.readFileSync(new URL("./supabase/pvp-forfeit-hotfix.sql",imp
 const gameProfileSql=fs.readFileSync(new URL("./supabase/game-profile-sync.sql",import.meta.url),"utf8");
 const compensationSql=fs.readFileSync(new URL("./supabase/v1.1.1-compensation.sql",import.meta.url),"utf8");
 const dailyRewardSql=fs.readFileSync(new URL("./supabase/daily-login-reward.sql",import.meta.url),"utf8");
+const multiDeckSql=fs.readFileSync(new URL("./supabase/v1.1.2-multi-decks.sql",import.meta.url),"utf8");
 const context=vm.createContext({console,Math,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},window:{dispatchEvent(){}}});
 vm.runInContext(`${dataSource}\n${engineSource}\nglobalThis.testExports={cards,cardById,settings,achievements,GameEngine};`,context);
 const {cards,cardById,settings,achievements,GameEngine}=context.testExports;
@@ -48,6 +49,13 @@ assert.deepEqual([cards.find(card=>card.id==="character_73")?.weakness,cards.fin
 assert.deepEqual([cards.find(card=>card.id==="character_46")?.weakness,cards.find(card=>card.id==="character_46")?.resistance],["red","brown"],"박찬대 약점/저항");
 assert.equal(cards.find(card=>card.id==="strategy_18")?.effects?.find(effect=>effect.type==="selfDamage")?.amount,40,"48시간 무박 유세 자해 피해");
 assert.equal(cards.find(card=>card.id==="strategy_05")?.effects?.[0]?.type,"allowExtraAction","비선실세 기술 또는 특성 추가 행동");
+assert.equal(cards.find(card=>card.id==="strategy_22")?.effects?.[0]?.amount,20,"강달프 영구 피해 경감 20");
+assert.match(cards.find(card=>card.id==="strategy_22")?.description||"",/피해를 20 줄입니다/,"강달프 설명 수치 20");
+const impeachmentEffect=cards.find(card=>card.id==="strategy_12")?.effects?.[0];
+assert.equal(impeachmentEffect?.type,"discardEnemyActiveIfPackNoUseCount","탄핵 대통령 트래쉬 효과");
+assert.equal(impeachmentEffect?.packId,"pack_president","탄핵 대통령 팩 대상");
+assert.deepEqual([...(impeachmentEffect?.excludedIds||[])],["character_06"],"탄핵은 노무현을 대상에서 제외");
+assert.match(cards.find(card=>card.id==="strategy_12")?.description||"",/대통령 카드\(노무현 제외\) 1장을 트래쉬.*사용 카운트를 소비하지 않습니다/,"탄핵 설명과 무료 교체 규칙");
 assert.equal(cards.find(card=>card.id==="character_16")?.hp,140,"조 바이든 기본 체력 140");
 for(const card of cards){
   const candidates=card.image?[card.image]:["png","jpg","jpeg","webp"].map(ext=>`assets/cards/${card.id}.${ext}`);
@@ -87,20 +95,27 @@ assert.match(appSource,/rewardEligible:\(profile\.records\?\.tutorial\|\|0\)<1/,
 {
   const values=new Map(),localStorage={getItem:key=>values.has(key)?values.get(key):null,setItem:(key,value)=>values.set(key,value)};
   const storageContext=vm.createContext({localStorage});
-  vm.runInContext(`${storageSource};globalThis.exports={defaultProfile,loadProfile,saveProfile,profileStorageKey};`,storageContext);
+  vm.runInContext(`${storageSource};globalThis.exports={defaultProfile,normalizeProfile,loadProfile,saveProfile,profileStorageKey,MAX_DECKS};`,storageContext);
   const first=storageContext.exports.defaultProfile(),second=storageContext.exports.defaultProfile();
   first.currency=777;second.currency=333;
   storageContext.exports.saveProfile(first,"user-a");storageContext.exports.saveProfile(second,"user-b");
   assert.equal(storageContext.exports.loadProfile("user-a").currency,777,"계정 A 로컬 캐시 분리");
   assert.equal(storageContext.exports.loadProfile("user-b").currency,333,"계정 B 로컬 캐시 분리");
   assert.notEqual(storageContext.exports.profileStorageKey("user-a"),storageContext.exports.profileStorageKey("user-b"),"계정별 저장 키 분리");
+  const migrated=storageContext.exports.normalizeProfile({deck:["legacy-card"],currency:250});
+  assert.equal(migrated.decks.length,1,"기존 단일 덱 프로필을 첫 번째 덱으로 이전");
+  assert.equal(migrated.decks[0].cards[0],"legacy-card","기존 덱 카드 보존");
+  assert.equal(migrated.activeDeckId,"deck-1","기존 덱을 활성 덱으로 지정");
+  const three=storageContext.exports.normalizeProfile({decks:[{id:"a",name:"공격",cards:["a"]},{id:"b",name:"방어",cards:["b"]},{id:"c",name:"견제",cards:["c"]},{id:"d",name:"초과",cards:["d"]}],activeDeckId:"b"});
+  assert.equal(three.decks.length,storageContext.exports.MAX_DECKS,"덱 슬롯 최대 3개 제한");
+  assert.equal(three.deck[0],"b","선택한 덱의 카드가 실제 대전 덱으로 연결");
 }
 
 {
   assert.match(backendSource,/async getGameProfile\(userId\)[\s\S]*rpc\("get_game_profile"\)/,"서버 게임 프로필 불러오기 API");
   assert.match(backendSource,/async saveGameProfile\(userId, profile, expectedRevision, seasonId\)[\s\S]*rpc\("save_game_profile"/,"서버 게임 프로필 저장 API");
   assert.match(appSource,/function syncAccountGameProfile[\s\S]{0,1800}getGameProfile[\s\S]{0,1800}saveGameProfile/,"로그인 시 서버 프로필 로드 또는 최초 이전");
-  assert.match(appSource,/const save = \(\) => \{ saveProfile\(profile,authSession\?\.user\?\.id\|\|null\);queueServerProfileSave\(\)/,"모든 진행 저장 시 계정별 서버 동기화 예약");
+  assert.match(appSource,/const save = \(\) => \{ syncActiveDeckSlot\(\);saveProfile\(profile,authSession\?\.user\?\.id\|\|null\);queueServerProfileSave\(\)/,"모든 진행 저장 시 활성 덱과 계정별 서버 동기화 예약");
   assert.match(appSource,/game_profile_revision_conflict/,"다른 기기 동시 저장 충돌 감지");
   assert.match(appSource,/if\(session\?\.user\)\{await syncAccountGameProfile\(\);reward=await claimDailyLoginReward\(\);\}/,"자동 로그인 시 서버 진행 및 출석 보상 불러오기");
   assert.match(gameProfileSql,/create table if not exists public\.game_profiles/,"게임 진행 서버 테이블");
@@ -173,6 +188,11 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   engine.effects(0,skill.effects,{actionType:"skill"});
   assert.equal(engine.state.players[0].tokens.red,0,"그라운드 C 잔여 빨강 토큰 전부 소모");
   assert.equal(damageTaken(engine),150,"그라운드 C 잔여 빨강 3개 추가 피해 적용");
+  const traitEngine=battle({enemyTokens:{red:3}});traitEngine.state.players[0].active={...copy(groundC),currentHp:150};
+  traitEngine.effects(0,groundC.trait.effects,{actionType:"trait",tokenColor:"gray"});
+  assert.equal(traitEngine.state.players[1].tokens.red,0,"그라운드 C 특성이 상대 빨강 토큰 전부 변환");
+  assert.equal(traitEngine.state.players[1].tokens.gray,3,"그라운드 C 특성이 선택한 다른 색으로 변환");
+  assert.equal(traitEngine.state.players[0].active.currentHp,120,"그라운드 C 특성 반동 피해 적용");
 }
 
 {
@@ -237,12 +257,52 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 
 {
   const impeachment=cards.find(card=>card.id==="strategy_12"),engine=battle();
-  engine.state.players[1].active={...copy(yoonSeokYeol),currentHp:250};
+  const target=cards.find(card=>card.id==="character_07"),replacement=cards.find(card=>card.id==="character_08");
+  engine.state.players[1].active={...copy(target),currentHp:170};
+  engine.state.players[1].hand=[replacement.id];
+  engine.state.players[1].characterUses=2;
   engine.effects(0,impeachment.effects,{actionType:"strategy"});
-  assert.equal(engine.state.players[1].active,null,"탄핵은 윤석열을 덱으로 되돌림");
-  const noTarget=battle();noTarget.state.players[1].active={...copy(cards.find(card=>card.id==="character_06")),currentHp:250};
+  assert.equal(engine.state.players[1].active,null,"탄핵은 모든 대통령을 필드에서 제거");
+  assert.ok(engine.state.players[1].discard.includes(target.id),"탄핵된 대통령은 덱이 아닌 트래쉬로 이동");
+  assert.equal(engine.state.players[1].characterUses,2,"탄핵 직후 기존 인물 사용 카운트 유지");
+  engine.endTurn(0,"red");
+  assert.equal(engine.completeForcedReplacement(1,replacement.id),true,"탄핵 후 상대 인물 강제 교체");
+  assert.equal(engine.state.players[1].characterUses,2,"탄핵 교체 인물은 사용 카운트 미소비");
+  const excluded=battle();excluded.state.players[1].active={...copy(cards.find(card=>card.id==="character_06")),currentHp:250};
+  excluded.effects(0,impeachment.effects,{actionType:"strategy"});
+  assert.equal(excluded.state.players[1].active.id,"character_06","노무현은 탄핵 대상에서 제외");
+  assert.equal(excluded.state.players[1].discard.length,0,"탄핵 제외된 노무현은 트래쉬되지 않음");
+  const noTarget=battle();noTarget.state.players[1].active={...copy(cards.find(card=>card.id==="character_58")),currentHp:150};
   noTarget.effects(0,impeachment.effects,{actionType:"strategy"});
-  assert.equal(noTarget.state.players[1].active.name,"노무현","탄핵은 지정되지 않은 대통령에게 적용되지 않음");
+  assert.equal(noTarget.state.players[1].active.name,"그라운드 C","탄핵은 대통령 카드가 아닌 인물에게 적용되지 않음");
+}
+
+{
+  const spy=cards.find(card=>card.id==="strategy_25"),engine=battle(),me=engine.state.players[0],enemy=engine.state.players[1];
+  me.hand=[spy.id,"character_18"];me.deck=[];enemy.hand=["character_19","character_20"];
+  assert.equal(engine.useStrategy(0,spy.id,{stealHandId:"character_20"}),true,"간첩 카드 실제 사용 성공");
+  assert.ok(me.discard.includes(spy.id),"간첩 확인 선택을 마치면 카드 트래쉬");
+  assert.ok(me.hand.includes("character_20"),"간첩으로 선택한 상대 카드 획득");
+  assert.ok(enemy.hand.includes("character_19"),"간첩으로 선택하지 않은 카드는 상대에게 반환");
+  const revealPicker=appSource.match(/function chooseRevealedEnemyHandCard[^\n]+/)?.[0]||"";
+  assert.match(revealPicker,/querySelector\("#close-modal"\)\?\.remove\(\)/,"간첩 카드 확인 후 닫기로 사용 취소 불가");
+  assert.doesNotMatch(revealPicker,/keepModalOpenOnClose/,"간첩 앞면 확인창에 취소 처리 없음");
+}
+
+{
+  const disruptionSource=appSource.match(/function aiDisruptionTokenColor[^\n]+/)?.[0];
+  assert.ok(disruptionSource,"그라운드 C AI 방해 색 선택 함수 존재");
+  const aiContext=vm.createContext({settings:{tokenTypes:["red","blue","green","yellow","purple","pink","orange","brown","black","white","gray"]}});
+  vm.runInContext(`${disruptionSource};globalThis.pick=aiDisruptionTokenColor;`,aiContext);
+  const chosen=aiContext.pick({players:[{active:{skills:[{cost:{red:2}}]},tokens:{red:3}},{active:cards.find(card=>card.id==="character_58"),tokens:{}}]},1,"red");
+  assert.notEqual(chosen,"red","그라운드 C AI가 빨강 토큰을 다시 빨강으로 변환하지 않음");
+  assert.match(appSource,/if\(e\.type==="convertAllEnemyTokensByColor"\)[\s\S]{0,120}count\*35/,"AI가 상대 빨강 토큰 수를 특성 가치에 반영");
+  assert.match(appSource,/action\.type==="trait"[\s\S]{0,350}aiEffectUtilityScore/,"AI 특성 선택 점수에 변환 효과 반영");
+  const scoringSource=appSource.match(/function aiBonusDamage[\s\S]*?function aiShouldUseOptionalCoin/)?.[0].replace(/function aiShouldUseOptionalCoin[\s\S]*/,"");
+  const decisionContext=vm.createContext({cards,cardById,settings,RARITIES:["HR","SSR","SR","RR","R","U","C"],clone:value=>JSON.parse(JSON.stringify(value)),isVmaxCard:card=>card?.stage==="vmax",game:{canEvolve:()=>false,canUseSkill:()=>false,activeMatchesName:()=>false}});
+  vm.runInContext(`${scoringSource};globalThis.choose=aiBestAction;`,decisionContext);
+  const aiState={players:[{active:{id:"target",name:"상대",type:"character",attribute:"blue",hp:200,currentHp:200,skills:[{cost:{blue:2}}]},tokens:{red:3,blue:0},hand:[],deck:[],discard:[]},{active:{...JSON.parse(JSON.stringify(cards.find(card=>card.id==="character_58"))),currentHp:150},tokens:{red:0},hand:[],deck:[],discard:[],traitUsedThisTurn:false}]};
+  assert.equal(decisionContext.choose(aiState)?.type,"trait","AI가 상대 빨강 토큰이 있을 때 그라운드 C 특성을 행동으로 선택");
 }
 
 {
@@ -424,7 +484,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   assert.ok(transformSource,"PvP 좌석 변환 함수 존재");
   const transformContext=vm.createContext({});
   vm.runInContext(`let pvpSession={seat:1};${transformSource};globalThis.pvpExports={flipPvpState,pvpLocalState,pvpWireState};`,transformContext);
-  const wire={players:[{name:"host",hand:["a"]},{name:"guest",hand:["b"]}],turn:0,first:1,winner:null,setupChoice:{second:0},pvpSetupPending:[true,false],pvpLastAction:{actor:0},phase:"playing"};
+  const wire={players:[{name:"host",hand:["a"]},{name:"guest",hand:["b"],replacementDoesNotCount:true}],turn:0,first:1,winner:null,setupChoice:{second:0},pvpSetupPending:[true,false],pvpLastAction:{actor:0},phase:"playing"};
   transformContext.wire=wire;
   const local=vm.runInContext("pvpExports.pvpLocalState(wire)",transformContext);
   assert.equal(local.players[0].name,"guest","PvP 2번 좌석에서 내 플레이어가 0번으로 변환");
@@ -435,6 +495,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   transformContext.local=local;
   const roundTrip=vm.runInContext("pvpExports.pvpWireState(local)",transformContext);
   assert.equal(JSON.stringify(roundTrip),JSON.stringify(wire),"PvP 로컬↔서버 상태 왕복 보존");
+  assert.equal(roundTrip.players[1].replacementDoesNotCount,true,"PvP에서 탄핵 무료 교체 상태 보존");
   assert.equal(wire.players[0].name,"host","PvP 좌석 변환은 원본 상태를 변경하지 않음");
 }
 {
@@ -452,7 +513,9 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   assert.match(appSource,/previousState\?\.turn===1&&game\.state\.turn===0[\s\S]{0,100}showTurnTransition\(0\)/,"상대 턴 종료 수신 시 나의 턴 표시");
   assert.match(appSource,/shouldLeaveFinishedRoom[\s\S]{0,180}leaveActiveRoom\(\)/,"종료된 PvP에서 화면 이탈 시 방 탈퇴");
   assert.match(appSource,/if\(next===\"gallery\"\)galleryLoaded=false/,"갤러리 메뉴 진입 시 최신 글 다시 불러오기");
-  assert.match(appSource,/PATCH NOTES · v1\.1\.1/,"1.1.1 패치노트 표시");
+  assert.match(appSource,/PATCH NOTES · v1\.1\.2/,"1.1.2 패치노트 표시");
+  assert.match(appSource,/PATCH NOTES · v1\.1\.1/,"1.1.1 패치노트 존치");
+  assert.match(appSource,/PATCH NOTES · v1\.1(?!\.)/,"1.1 패치노트 존치");
   assert.match(appSource,/SEASON_ONE_RESET_KEY[\s\S]{0,500}profile=resetProfile\(\)/,"시즌 1 최초 접속 데이터 초기화");
   assert.match(appSource,/중복 1장마다 팩 가격의 20%/,"중복 보상 패치노트");
   assert.match(appSource,/id="forfeit-pvp"/,"진행 중 PvP 방 나가기 버튼");
@@ -567,6 +630,17 @@ const copy=value=>JSON.parse(JSON.stringify(value));
   const claimCalls=appSource.match(/await claimDailyLoginReward\(\)/g)||[];
   assert.equal(claimCalls.length,5,"회원가입·두 로그인 화면·자동 로그인에 출석 확인 연결");
   assert.match(appSource,/pushNotification\("오늘의 출석 보상",`매일 첫 로그인 보상/,"출석 지급 알림 기록");
+}
+
+{
+  assert.match(multiDeckSql,/add column if not exists decks jsonb/,"1.1.2 다중 덱 서버 필드 추가");
+  assert.match(multiDeckSql,/jsonb_array_length\(decks_value\)>3/,"서버에서도 덱 최대 3개 제한");
+  assert.match(multiDeckSql,/jsonb_build_object\('id','deck-1','name','덱 1','cards',deck\)/,"기존 덱을 덱 1로 안전하게 이전");
+  assert.match(multiDeckSql,/'decks',decks,'activeDeckId',active_deck_id/,"덱 이름과 활성 덱 서버 응답 포함");
+  assert.match(multiDeckSql,/last_daily_login_date is distinct from reward_date/,"1.1.2 적용 뒤에도 출석 중복 지급 방지 유지");
+  assert.match(appSource,/function createDeck\(\)[^\n]+profile\.decks\.length>=MAX_DECKS/,"덱 추가 최대 3개 제한");
+  assert.match(appSource,/function renameActiveDeck\(value\)[^\n]+slice\(0,20\)/,"덱 이름 20자 제한");
+  assert.match(appSource,/data-select-deck/,"덱 전환 UI 제공");
 }
 
 {
