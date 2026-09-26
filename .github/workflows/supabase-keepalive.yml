@@ -1,0 +1,31 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # 매일 12:17 KST. Supabase 공식 안내의 일일 DB 활동 권장 수준에 맞춥니다.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query Supabase database
+        env:
+          SUPABASE_URL: https://ngninlrunpfrahkboblj.supabase.co
+          # 브라우저용 공개 키이며 service_role 키가 아닙니다.
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_tnPEieCk7YJH3emHc9cy7w_PZ_JPEJx
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors \
+            --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            --header "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+            "${SUPABASE_URL}/rest/v1/profiles?select=id&limit=1"
