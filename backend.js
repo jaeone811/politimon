@@ -55,6 +55,36 @@
       const refresh=async()=>{ try { const match=await api.getMatch(roomId); if (!stopped && match?.state && Object.keys(match.state).length) onMatch(match); } catch(error) { if(!stopped) onError(error); } };
       clientReady.then(()=>{ if(!client || stopped) return; channel=client.channel(`politimon-match-${roomId}`).on("postgres_changes",{event:"*",schema:"public",table:"matches",filter:`room_id=eq.${roomId}`},refresh).subscribe(status=>{ if(status==="SUBSCRIBED") refresh(); }); }).catch(onError);
       return ()=>{ stopped=true; if(channel && client) client.removeChannel(channel); };
+    },
+    /* PvP 대전 채팅: DB에 저장하지 않는 Realtime Broadcast 공개 채널을 방 단위로 사용합니다. */
+    openChat(roomId, { onMessage=()=>{}, onStatus=()=>{} }={}) {
+      let channel=null, local=null, stopped=false, status="connecting";
+      const topic=`politimon-chat-${roomId}`;
+      const setStatus=next=>{ if(stopped || status===next) return; status=next; onStatus(next); };
+      const receive=message=>{ if(!stopped && message && typeof message==="object") onMessage(message); };
+      const ready=clientReady.then(()=>{
+        if(stopped) return;
+        if(!client){
+          if(typeof BroadcastChannel!=="function"){ setStatus("offline"); return; }
+          local=new BroadcastChannel(topic); local.onmessage=event=>receive(event.data); setStatus("connected"); return;
+        }
+        channel=client.channel(topic,{ config:{ broadcast:{ self:false, ack:true } } })
+          .on("broadcast",{ event:"chat" },message=>receive(message?.payload))
+          .subscribe(next=>{ if(next==="SUBSCRIBED") setStatus("connected"); else if(["CHANNEL_ERROR","TIMED_OUT","CLOSED"].includes(next)) setStatus("offline"); });
+      }).catch(()=>setStatus("offline"));
+      return {
+        get status(){ return status; },
+        async send(message){
+          await ready;
+          if(stopped) throw new Error("채팅 연결이 종료되었습니다.");
+          if(local){ local.postMessage(message); return "ok"; }
+          if(!channel) throw new Error("채팅 서버에 연결되지 않았습니다.");
+          const result=await channel.send({ type:"broadcast", event:"chat", payload:message });
+          if(result!=="ok") throw new Error(result==="timed out"?"전송 시간이 초과되었습니다.":"메시지를 보내지 못했습니다.");
+          return result;
+        },
+        close(){ stopped=true; if(local){ local.close(); local=null; } if(channel && client) client.removeChannel(channel); channel=null; }
+      };
     }
   };
   window.politimonBackend = api;
