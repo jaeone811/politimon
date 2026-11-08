@@ -1,0 +1,107 @@
+/* v1.2 실시간 PvP 대전 채팅 · 인스타그램 PC DM 창 구조를 정치몬 블루 테마로 재해석 */
+.pvp-chat{--chat-bg:#072445f2;--chat-panel:#0a2c52;--chat-line:#7fd6ff2e;--chat-line-strong:#7fd6ff5c;--chat-ink:#eef9ff;--chat-muted:#93b8d3;--chat-accent:#72d9ff;--chat-mine:linear-gradient(135deg,#2f7df6 0%,#3fa8ff 55%,#5ad0ff 100%);--chat-theirs:#14406b;position:fixed;right:24px;bottom:24px;z-index:40;font-family:"Gowun Dodum",system-ui,sans-serif;color:var(--chat-ink);pointer-events:none}
+.pvp-chat>*{pointer-events:auto}
+.pvp-chat [hidden]{display:none!important}
+.pvp-chat svg{width:100%;height:100%;display:block}
+.pvp-chat button{font:inherit;color:inherit;cursor:pointer}
+
+/* 접힌 상태: 메시지 알약 버튼 */
+.pvp-chat-pill{position:relative;display:flex;align-items:center;gap:12px;min-width:232px;height:54px;padding:0 14px 0 18px;border:1px solid var(--chat-line-strong);border-radius:999px;background:linear-gradient(145deg,#0f3d6bf5,#06213ff5);box-shadow:0 16px 38px #0009,inset 0 1px #ffffff14;backdrop-filter:blur(12px);transition:transform .18s,border-color .18s,box-shadow .18s}
+.pvp-chat-pill:hover{transform:translateY(-2px);border-color:var(--chat-accent);box-shadow:0 18px 44px #000a,0 0 0 3px #72d9ff1f}
+.pvp-chat-pill:focus-visible{outline:2px solid var(--chat-accent);outline-offset:3px}
+.pvp-chat-pill-icon{width:25px;height:25px;flex:0 0 auto;color:#f3fbff}
+.pvp-chat-pill-label{font-size:17px;font-weight:700;letter-spacing:-.2px}
+.pvp-chat-pill-faces{margin-left:auto;display:flex;align-items:center}
+.pvp-chat-pill-faces .pvp-chat-avatar{border:2px solid #082848}
+.pvp-chat-pill-faces .pvp-chat-avatar+.pvp-chat-avatar{margin-left:-9px}
+.pvp-chat-badge{position:absolute;top:-6px;right:-4px;min-width:22px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:999px;background:#ff4f73;border:2px solid #061c37;color:#fff;font:700 11px/1 "DM Mono",monospace;font-style:normal;box-shadow:0 4px 12px #ff4f7366}
+.pvp-chat.has-unread .pvp-chat-pill{border-color:var(--chat-accent);animation:pvpChatGlow 1.8s ease-in-out infinite}
+@keyframes pvpChatGlow{50%{box-shadow:0 16px 38px #0009,0 0 0 5px #72d9ff2b}}
+
+/* 접힌 상태에서 새 메시지 미리보기 */
+.pvp-chat-peek{position:absolute;right:0;bottom:66px;width:max-content;max-width:260px;padding:10px 14px;border-radius:16px 16px 4px 16px;background:#0e3a66f5;border:1px solid var(--chat-line-strong);box-shadow:0 12px 30px #0008;cursor:pointer}
+.pvp-chat-peek b{display:block;font-size:11px;color:var(--chat-accent);margin-bottom:2px}
+.pvp-chat-peek span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:1.4;word-break:break-word}
+.pvp-chat-peek.show{animation:pvpChatPeek .28s ease-out}
+@keyframes pvpChatPeek{from{opacity:0;transform:translateY(8px)}}
+
+/* 아바타: 프로필 이미지가 없으므로 이름 첫 글자 */
+.pvp-chat-avatar{display:inline-grid;place-items:center;flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#9cecff,#277ed0);color:#062444;font:800 14px/1 "Gowun Dodum",sans-serif;user-select:none}
+.pvp-chat-avatar.sm{width:28px;height:28px;font-size:12px}
+.pvp-chat-avatar.self{background:linear-gradient(135deg,#d5f3ff,#5aa9f0)}
+.pvp-chat-avatar.lg{width:72px;height:72px;font-size:28px;box-shadow:0 0 0 4px #72d9ff24}
+.pvp-chat-avatar-spacer{width:28px;flex:0 0 auto}
+
+/* 펼친 상태: DM 창 */
+.pvp-chat-panel{display:flex;flex-direction:column;width:360px;height:min(540px,calc(100vh - 140px));border:1px solid var(--chat-line-strong);border-radius:18px;overflow:hidden;background:var(--chat-bg);box-shadow:0 26px 70px #000b,inset 0 1px #ffffff12;backdrop-filter:blur(16px);transform-origin:bottom right;animation:pvpChatOpen .22s cubic-bezier(.2,.9,.3,1.15)}
+.pvp-chat-panel[hidden],.pvp-chat-pill[hidden]{display:none}
+.pvp-chat[data-size="wide"] .pvp-chat-panel{width:440px;height:min(700px,calc(100vh - 120px))}
+@keyframes pvpChatOpen{from{opacity:0;transform:scale(.92) translateY(10px)}}
+
+.pvp-chat-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:60px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--chat-line);background:linear-gradient(180deg,#0e3a66cc,#0a2c5200)}
+.pvp-chat-who{display:flex;align-items:center;gap:10px;min-width:0}
+.pvp-chat-who>div{display:grid;min-width:0}
+.pvp-chat-name{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvp-chat-status{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--chat-muted)}
+.pvp-chat-status:before{content:"";width:7px;height:7px;border-radius:50%;background:#f3c25b;box-shadow:0 0 8px #f3c25b}
+.pvp-chat[data-connection="connected"] .pvp-chat-status:before{background:#5ff2b2;box-shadow:0 0 8px #5ff2b2}
+.pvp-chat[data-connection="offline"] .pvp-chat-status:before{background:#ff6b86;box-shadow:0 0 8px #ff6b86}
+.pvp-chat-tools{display:flex;gap:2px}
+.pvp-chat-tools button{width:34px;height:34px;padding:8px;border:0;border-radius:10px;background:transparent;color:#d7efff;transition:background .15s,color .15s}
+.pvp-chat-tools button:hover{background:#ffffff14;color:#fff}
+.pvp-chat-tools button:focus-visible,.pvp-chat-emoji:focus-visible,.pvp-chat-send:focus-visible,.pvp-chat-chip:focus-visible{outline:2px solid var(--chat-accent);outline-offset:1px}
+
+.pvp-chat-body{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:14px 12px 8px;scrollbar-width:thin;scrollbar-color:#5aa9d866 transparent}
+.pvp-chat-body::-webkit-scrollbar{width:6px}.pvp-chat-body::-webkit-scrollbar-thumb{background:#5aa9d866;border-radius:6px}
+.pvp-chat-intro{display:grid;justify-items:center;gap:4px;padding:14px 10px 18px;text-align:center}
+.pvp-chat-intro b{margin-top:8px;font-size:17px}
+.pvp-chat-intro>span:not(.pvp-chat-avatar){font:500 11px "DM Mono",monospace;letter-spacing:.5px;color:var(--chat-accent)}
+.pvp-chat-intro small{max-width:260px;word-break:keep-all;margin-top:6px;font-size:11px;line-height:1.55;color:var(--chat-muted)}
+.pvp-chat-divider{margin:12px 0 8px;text-align:center;font-size:11px;color:var(--chat-muted)}
+
+.pvp-chat-row{display:flex;align-items:flex-end;gap:8px;margin-top:10px;animation:pvpChatIn .18s ease-out}
+.pvp-chat-row.joins-prev{margin-top:2px}
+.pvp-chat-row.mine{justify-content:flex-end}
+@keyframes pvpChatIn{from{opacity:0;transform:translateY(5px)}}
+.pvp-chat-bubble{margin:0;max-width:74%;padding:9px 14px;border-radius:20px;font-size:14px;line-height:1.42;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+.theirs .pvp-chat-bubble{background:var(--chat-theirs);border:1px solid #7fd6ff1f;color:#eaf7ff}
+.mine .pvp-chat-bubble{background:var(--chat-mine);color:#fff;box-shadow:0 6px 16px #2f86f533}
+.theirs.joins-prev .pvp-chat-bubble{border-top-left-radius:6px}.theirs.joins-next .pvp-chat-bubble{border-bottom-left-radius:6px}
+.mine.joins-prev .pvp-chat-bubble{border-top-right-radius:6px}.mine.joins-next .pvp-chat-bubble{border-bottom-right-radius:6px}
+.pvp-chat-bubble.emoji-only{padding:0 2px;background:none!important;border:0!important;box-shadow:none!important;font-size:36px;line-height:1.15}
+.pvp-chat-row.sending .pvp-chat-bubble{opacity:.6}
+.pvp-chat-row.failed .pvp-chat-bubble{opacity:.75;outline:1px solid #ff6b86aa}
+.pvp-chat-meta{margin:4px 4px 0;text-align:right;font-size:11px;color:var(--chat-muted)}
+.pvp-chat-meta.failed{color:#ff9aac}
+.pvp-chat-meta button{padding:0;border:0;background:none;color:#ffd0d9;text-decoration:underline;font-size:11px}
+
+.pvp-chat-quick{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 0;border-top:1px solid var(--chat-line)}
+.pvp-chat-quick[hidden]{display:none}
+.pvp-chat-chip{height:30px;padding:0 11px;border:1px solid var(--chat-line-strong);border-radius:999px;background:#113e68;color:#def4ff;font-size:12px;transition:background .15s,border-color .15s}
+.pvp-chat-chip.emoji{width:34px;padding:0;font-size:17px}
+.pvp-chat-chip:hover{background:#185687;border-color:var(--chat-accent)}
+
+.pvp-chat-compose{display:flex;align-items:center;gap:6px;margin:10px 12px 12px;height:46px;padding:0 6px 0 8px;border:1px solid var(--chat-line-strong);border-radius:23px;background:#061d39;transition:border-color .15s,box-shadow .15s}
+.pvp-chat-compose:focus-within{border-color:var(--chat-accent);box-shadow:0 0 0 3px #72d9ff1f}
+.pvp-chat-emoji{flex:0 0 auto;width:32px;height:32px;padding:5px;border:0;border-radius:50%;background:none;color:#d7efff}
+.pvp-chat-emoji:hover,.pvp-chat-emoji.active{color:var(--chat-accent);background:#72d9ff14}
+.pvp-chat-input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;color:var(--chat-ink);font:14px "Gowun Dodum",system-ui,sans-serif}
+.pvp-chat-input::placeholder{color:#7f9fb9}
+.pvp-chat-send{flex:0 0 auto;padding:6px 10px;border:0;border-radius:14px;background:none;color:var(--chat-accent)!important;font-weight:800!important;font-size:14px;transition:opacity .15s}
+.pvp-chat-send:hover:not(:disabled){background:#72d9ff14}
+.pvp-chat-send:disabled{opacity:0;pointer-events:none}
+
+body.reduce-motion .pvp-chat *,body.reduce-motion .pvp-chat{animation:none!important;transition:none!important}
+
+/* 모바일: 둥근 버튼 + 하단 시트 */
+@media(max-width:700px){
+  .pvp-chat{right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+  .pvp-chat[data-state="open"]{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .pvp-chat-pill{min-width:0;width:56px;height:56px;padding:0;justify-content:center}
+  .pvp-chat-pill-label,.pvp-chat-pill-faces{display:none}
+  .pvp-chat-pill-icon{width:26px;height:26px}
+  .pvp-chat-peek{max-width:min(260px,calc(100vw - 40px))}
+  .pvp-chat-panel,.pvp-chat[data-size="wide"] .pvp-chat-panel{width:100%;height:min(72vh,560px)}
+  .pvp-chat-size{display:none}
+  .pvp-chat-input{font-size:16px}
+}
